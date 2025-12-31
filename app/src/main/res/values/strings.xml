@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">ThingsAppAndroid</string>
+
+    <!-- Auth Common -->
+    <string name="email_label">Email</string>
+    <string name="email_placeholder">Email address</string>
+    <string name="password_label">Password</string>
+    <string name="password_placeholder">Enter password</string>
+    <string name="show_password_desc">Show password</string>
+    <string name="hide_password_desc">Hide password</string>
+    <string name="or_divider">Or</string>
+
+    <!-- Login Screen -->
+    <string name="login_title">Welcome back</string>
+    <string name="login_subtitle">ThingsApp tracks charging only, not your apps or personal data.</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="sign_in_button">Sign in</string>
+    <string name="guest_continue">Continue as a guest</string>
+    <string name="google_continue">Continue with Google</string>
+    <string name="facebook_continue">Continue with Facebook</string>
+    <string name="no_account_text">"Don\'t have an account? "</string>
+    <string name="sign_up_link">Sign up</string>
+
+    <!-- SignUp Screen -->
+    <string name="signup_title">Create an account</string>
+    <string name="signup_subtitle">Get started with your smart charging journey.</string>
+    <string name="full_name_label">Full Name</string>
+    <string name="full_name_placeholder">Enter your full name</string>
+    <string name="confirm_password_label">Confirm Password</string>
+    <string name="confirm_password_placeholder">Confirm your password</string>
+    <string name="sign_up_button">Sign up</string>
+    <string name="has_account_text">"Already have an account? "</string>
+    <string name="sign_in_link">Sign in</string>
+</resources>
