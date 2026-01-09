@@ -1,0 +1,40 @@
+{
+  "ignore_dirs": [
+    ".fetch-client",
+    "ios/build",
+    ".dart_tool",
+    "android/app/build",
+    ".fvm",
+    "dist",
+    "coverage",
+    ".git",
+    "bin",
+    ".vscode",
+    ".pub-cache",
+    ".github",
+    "__pycache__",
+    ".next",
+    "venv",
+    ".genclaude",
+    "node_modules",
+    ".nuxt",
+    "captures",
+    "obj",
+    "out",
+    "logs",
+    ".idea",
+    "build",
+    "generated",
+    "target",
+    "env",
+    ".gradle"
+  ],
+  "custom_patterns": [
+    "*~",
+    "*.tmp"
+  ],
+  "excluded_paths": [
+    "sync_server.py"
+  ],
+  "timestamp": 1767933855.14693
+}

@@ -2,17 +2,45 @@ package com.example.thingsappandroid.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Brand Colors
+val PrimaryGreen = Color(0xFF39B54A)
+val DarkGreen = Color(0xFF009444)
+val SecondaryGreen = Color(0xFFEBF9ED)
+val ActivityGreen = Color(0xFF5EA500)
+val BatteryYellow = Color(0xFFEEA811)
+val LogoYellow = Color(0xFFD7DF23)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Gradients
+val BatteryGradientStart = Color(0xFF9CF544)
+val BatteryGradientEnd = Color(0xFF38E053)
+val GreenFiGradientStart = Color(0xFF00AA45)
+val GreenFiGradientEnd = Color(0xFFD3FF33)
 
-val TextPrimary = Color(0xFF000000)
-val TextSecondary = Color(0xFF888888)
+// Grays
+val Gray900 = Color(0xFF1E1E1E)
+val Gray800 = Color(0xFF262626)
+val Gray600 = Color(0xFF525252)
+val Gray500 = Color(0xFF737373)
+val Gray400 = Color(0xFFA3A3A3)
+val Gray300 = Color(0xFFD4D4D4)
+val Gray200 = Color(0xFFE5E5E5)
+val Gray100 = Color(0xFFF5F5F5)
 
-val Green = Color(0xFF41A500)
-val LightGreen = Color(0xFFF1F8E9)
-val White = Color(0xFFFFFFFF)
+// Connector Colors
+val ConnectorStroke = Color(0xFFE5E5E5)
+val ConnectorCap = Color(0xFFD4D4D4)
+
+// Social Colors
+val FacebookBlue = Color(0xFF1877F2)
+
+// Text Colors
+val TextPrimary = Gray800
+val TextSecondary = Gray500
+val TextWhite = Color(0xFFFFFFFF)
+
+// UI Colors
+val BackgroundWhite = Color(0xFFFFFFFF)
+val SurfaceGray = Gray100
+val TextFieldBackground = Color(0xFFF0F0F0)
+val BorderGray = Gray200
+val ErrorRed = Color(0xFFBA1A1A)

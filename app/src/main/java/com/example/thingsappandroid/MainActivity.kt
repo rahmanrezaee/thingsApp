@@ -7,14 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.thingsappandroid.features.auth.forgotpassword.ForgotPasswordScreen
 import com.example.thingsappandroid.features.auth.login.LoginScreen
 import com.example.thingsappandroid.features.auth.signup.SignUpScreen
+import com.example.thingsappandroid.features.auth.verify.VerifyScreen
 import com.example.thingsappandroid.features.onboarding.OnboardingScreen
 import com.example.thingsappandroid.navigation.Screen
+import com.example.thingsappandroid.ui.screens.home.HomeScreen
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,7 +43,7 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Onboarding.route) {
                         OnboardingScreen(
                             onOnboardingFinished = {
-                                sharedPreferences.edit().putBoolean("onboarding_completed", true).apply()
+                                sharedPreferences.edit { putBoolean("onboarding_completed", true) }
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(Screen.Onboarding.route) { inclusive = true }
                                 }
@@ -52,7 +57,9 @@ class MainActivity : ComponentActivity() {
                                 Toast.makeText(context, "Login clicked", Toast.LENGTH_SHORT).show() 
                             },
                             onGuestClick = { 
-                                Toast.makeText(context, "Guest clicked", Toast.LENGTH_SHORT).show() 
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(Screen.Login.route) { inclusive = true }
+                                }
                             },
                             onGoogleClick = { 
                                 Toast.makeText(context, "Google clicked", Toast.LENGTH_SHORT).show() 
@@ -71,12 +78,45 @@ class MainActivity : ComponentActivity() {
 
                     composable(Screen.SignUp.route) {
                         SignUpScreen(
-                            onSignUpClick = { 
-                                Toast.makeText(context, "Sign up clicked", Toast.LENGTH_SHORT).show() 
+                            onSignUpClick = { email ->
+                                navController.navigate(Screen.Verify.createRoute(email, false))
                             },
                             onLoginClick = { 
-                                // Navigate back to login
                                 navController.popBackStack() 
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Screen.Verify.route,
+                        arguments = listOf(
+                            navArgument("email") { type = NavType.StringType },
+                            navArgument("isFromForgot") { type = NavType.BoolType }
+                        )
+                    ) { backStackEntry ->
+                        val email = backStackEntry.arguments?.getString("email") ?: ""
+                        val isFromForgot = backStackEntry.arguments?.getBoolean("isFromForgot") ?: false
+                        
+                        VerifyScreen(
+                            email = email,
+                            isFromForgot = isFromForgot,
+                            onVerifyClick = {
+                                Toast.makeText(context, "Verified!", Toast.LENGTH_SHORT).show()
+                                if (isFromForgot) {
+                                    navController.navigate(Screen.Login.route) {
+                                        popUpTo(Screen.Login.route) { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate(Screen.Login.route) {
+                                        popUpTo(Screen.SignUp.route) { inclusive = true }
+                                    }
+                                }
+                            },
+                            onResendClick = {
+                                Toast.makeText(context, "Code resent to $email", Toast.LENGTH_SHORT).show()
+                            },
+                            onBackClick = {
+                                navController.popBackStack()
                             }
                         )
                     }
@@ -84,13 +124,16 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.ForgotPassword.route) {
                         ForgotPasswordScreen(
                             onSendResetLink = { email ->
-                                Toast.makeText(context, "Reset link sent to $email", Toast.LENGTH_SHORT).show()
-                                navController.popBackStack()
+                                navController.navigate(Screen.Verify.createRoute(email, true))
                             },
                             onNavigateBack = {
                                 navController.popBackStack()
                             }
                         )
+                    }
+
+                    composable(Screen.Home.route) {
+                        HomeScreen()
                     }
                 }
             }

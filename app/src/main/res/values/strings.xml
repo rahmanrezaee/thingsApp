@@ -9,6 +9,8 @@
     <string name="show_password_desc">Show password</string>
     <string name="hide_password_desc">Hide password</string>
     <string name="or_divider">Or</string>
+    <string name="continue_button">Continue</string>
+    <string name="terms_agreement_label">I agree to the Terms and Conditions</string>
 
     <!-- Login Screen -->
     <string name="login_title">Welcome back</string>
@@ -24,11 +26,34 @@
     <!-- SignUp Screen -->
     <string name="signup_title">Create an account</string>
     <string name="signup_subtitle">Get started with your smart charging journey.</string>
+    <string name="signup_step2_subtitle">Tell us your name to personalize your experience.</string>
     <string name="full_name_label">Full Name</string>
     <string name="full_name_placeholder">Enter your full name</string>
     <string name="confirm_password_label">Confirm Password</string>
     <string name="confirm_password_placeholder">Confirm your password</string>
     <string name="sign_up_button">Sign up</string>
+    <string name="next_button">Next</string>
     <string name="has_account_text">"Already have an account? "</string>
     <string name="sign_in_link">Sign in</string>
+
+    <!-- Verify Screen -->
+    <string name="verify_title">Verify your account</string>
+    <string name="verify_subtitle">We have sent a verification code to your email address.</string>
+    <string name="verify_button">Verify</string>
+    <string name="verify_button_reset">Send verify otp</string>
+    <string name="otp_label">Verification Code</string>
+    <string name="otp_placeholder">Enter 6-digit code</string>
+    <string name="resend_code_text">"Didn\'t receive code? "</string>
+    <string name="resend_link">Resend</string>
+    <string name="resend_timer_format">Resend in %d seconds</string>
+
+    <!-- Forgot Password Screen -->
+    <string name="forgot_password_title">Forgot password</string>
+    <string name="forgot_password_subtitle">Enter your email address and we\'ll send you a link to reset your password.</string>
+    <string name="send_reset_link_button">Send Reset Link</string>
+    <string name="remember_password_text">"Remember password? "</string>
+    <string name="login_link">Login</string>
+
+    <!-- Evaluation Button -->
+    <string name="btn_evaluation_label">Evaluate</string>
 </resources>

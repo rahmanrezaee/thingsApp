@@ -1,6 +1,5 @@
 package com.example.thingsappandroid.features.onboarding
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,30 +21,33 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.R
+import com.example.thingsappandroid.ui.theme.PrimaryGreen
+import com.example.thingsappandroid.ui.theme.SecondaryGreen
+import com.example.thingsappandroid.ui.theme.TextPrimary
+import com.example.thingsappandroid.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
-
-// Define exact colors from the design
-val OliveGreen = Color(0xFF4B6F08) // The main active color
-val PaleGreen = Color(0xFFF2F8E4)  // The background for "Skip" and inactive dots
-val TextBlack = Color(0xFF1D1D1D)
-val TextGray = Color(0xFF555555)
 
 data class OnboardingPage(
     val image: Int,
@@ -59,7 +61,7 @@ fun OnboardingScreen(
 ) {
     val pages = listOf(
         OnboardingPage(
-            image = R.drawable.onboard, // Ensure this drawable resource exists
+            image = R.drawable.onboard,
             title = "Understand Your\nCharging Impact",
             description = "ThingsApp shows how charging your\nphone affects the climate — automatically,\nwith no setup."
         ),
@@ -77,6 +79,7 @@ fun OnboardingScreen(
 
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
+    var isTermsAccepted by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Color.White,
@@ -86,35 +89,54 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp)
-                    .padding(bottom = 12.dp) // Extra padding for SafeArea
+                    .padding(bottom = 12.dp)
             ) {
                 if (pagerState.currentPage == pages.lastIndex) {
-                    // Last Page: Single "Get Started" Button
-                    Button(
-                        onClick = onOnboardingFinished,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = OliveGreen,
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(0.dp)
-                    ) {
-                        Text(
-                            text = "Get Started",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                    Column {
+                        // Terms Checkbox
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Checkbox(
+                                checked = isTermsAccepted,
+                                onCheckedChange = { isTermsAccepted = it }
+                            )
+                            Text(
+                                text = stringResource(R.string.terms_agreement_label),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = onOnboardingFinished,
+                            enabled = isTermsAccepted,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PrimaryGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
+                        ) {
+                            Text(
+                                text = "Get Started",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 } else {
-                    // Pages 1 & 2: Skip and Next Buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Skip Button
                         Button(
                             onClick = onOnboardingFinished,
                             modifier = Modifier
@@ -122,21 +144,20 @@ fun OnboardingScreen(
                                 .height(56.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = PaleGreen,
-                                contentColor = OliveGreen
+                                containerColor = SecondaryGreen,
+                                contentColor = PrimaryGreen
                             ),
                             elevation = ButtonDefaults.buttonElevation(0.dp)
                         ) {
                             Text(
                                 text = "Skip",
-                                fontSize = 16.sp,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        // Next Button
                         Button(
                             onClick = {
                                 coroutineScope.launch {
@@ -148,14 +169,14 @@ fun OnboardingScreen(
                                 .height(56.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = OliveGreen,
+                                containerColor = PrimaryGreen,
                                 contentColor = Color.White
                             ),
                             elevation = ButtonDefaults.buttonElevation(0.dp)
                         ) {
                             Text(
                                 text = "Next",
-                                fontSize = 16.sp,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -173,7 +194,7 @@ fun OnboardingScreen(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // Takes up all remaining space above buttons
+                    .weight(1f)
             ) { page ->
                 OnboardingPageContent(
                     page = pages[page],
@@ -203,7 +224,7 @@ fun OnboardingPageContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.55f), // Image takes upper ~55% of screen
+                .weight(0.55f),
             contentAlignment = Alignment.Center
         ) {
             Image(
@@ -217,7 +238,7 @@ fun OnboardingPageContent(
         // Text Content Area
         Column(
             modifier = Modifier
-                .weight(0.45f) // Text takes lower ~45%
+                .weight(0.45f)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
@@ -226,27 +247,23 @@ fun OnboardingPageContent(
 
             Text(
                 text = page.title,
-                color = TextBlack,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center,
-                lineHeight = 34.sp
+                color = TextPrimary
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = page.description,
-                color = TextGray,
-                fontSize = 16.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp,
+                color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Indicators are placed here, directly below text, matching the design
             PageIndicator(
                 pagerState = pagerState,
                 pageCount = pageCount
@@ -265,8 +282,7 @@ fun PageIndicator(
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(pageCount) { iteration ->
-            val color = if (pagerState.currentPage == iteration) OliveGreen else PaleGreen
-            // Slightly larger dot for active state if desired, or simple color change
+            val color = if (pagerState.currentPage == iteration) PrimaryGreen else SecondaryGreen
             val size = 8.dp
 
             Box(

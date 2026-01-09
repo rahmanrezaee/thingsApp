@@ -11,18 +11,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,7 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -43,11 +41,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.components.CustomTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
-import com.example.thingsappandroid.ui.theme.Green
+import com.example.thingsappandroid.ui.theme.BorderGray
+import com.example.thingsappandroid.ui.theme.FacebookBlue
+import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
@@ -66,40 +65,37 @@ fun LoginScreen(
     var isPasswordVisible by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
-
-    // Root container to handle scrolling and centering
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        // Compact Content Container
+    val configuration = LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background Image could go here if needed
+        
         Column(
             modifier = Modifier
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(screenHeight * 0.08f))
 
             // Header
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = stringResource(R.string.login_title),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = TextPrimary
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.login_subtitle),
-                    fontSize = 14.sp,
-                    color = TextSecondary,
-                    lineHeight = 20.sp
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Form
             CustomTextField(
@@ -130,27 +126,29 @@ fun LoginScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
+            // Forgot Password Link - Centered
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 Text(
                     text = stringResource(R.string.forgot_password),
-                    color = Green,
+                    color = PrimaryGreen,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
                     modifier = Modifier.clickable { onForgotPasswordClick() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // Sign In Button with High Elevation
             PrimaryButton(
                 text = stringResource(R.string.sign_in_button),
                 onClick = onLoginClick,
-                enabled = true
+                enabled = true, // Enabled by default or add validation logic here
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -160,92 +158,68 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Divider(modifier = Modifier.weight(1f), color = Color(0xFFE0E0E0))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = BorderGray)
                 Text(
                     text = stringResource(R.string.or_divider),
                     color = TextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                Divider(modifier = Modifier.weight(1f), color = Color(0xFFE0E0E0))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = BorderGray)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Social Buttons
-            SocialButton(
+            
+            // Guest Button
+            PrimaryButton(
                 text = stringResource(R.string.guest_continue),
-                onClick = onGuestClick
+                onClick = onGuestClick,
+                containerColor = Color.White,
+                contentColor = TextPrimary,
+                border = BorderStroke(1.dp, BorderGray),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            SocialButton(
+            // Google Button
+            PrimaryButton(
                 text = stringResource(R.string.google_continue),
-                onClick = onGoogleClick
+                onClick = onGoogleClick,
+                containerColor = Color.White,
+                contentColor = TextPrimary,
+                border = BorderStroke(1.dp, BorderGray),
+                icon = R.drawable.ic_google
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            SocialButton(
+            // Facebook Button
+            PrimaryButton(
                 text = stringResource(R.string.facebook_continue),
-                onClick = onFacebookClick
+                onClick = onFacebookClick,
+                containerColor = Color.White,
+                contentColor = TextPrimary,
+                border = BorderStroke(1.dp, BorderGray),
+                icon = R.drawable.ic_facebook
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
             // Footer
             Text(
                 text = buildAnnotatedString {
                     append(stringResource(R.string.no_account_text))
-                    withStyle(style = SpanStyle(color = Green, fontWeight = FontWeight.Bold)) {
+                    append(" ")
+                    withStyle(style = SpanStyle(color = PrimaryGreen, fontWeight = FontWeight.Bold)) {
                         append(stringResource(R.string.sign_up_link))
                     }
                 },
                 modifier = Modifier.clickable { onSignUpClick() },
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 color = TextPrimary
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-@Composable
-fun SocialButton(
-    text: String,
-    onClick: () -> Unit,
-    icon: ImageVector? = null
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = TextPrimary
-        )
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp),
-                    tint = Color.Unspecified
-                )
-            }
-            Text(
-                text = text,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

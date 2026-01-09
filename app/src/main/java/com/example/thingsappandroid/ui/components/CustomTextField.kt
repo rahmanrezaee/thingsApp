@@ -7,17 +7,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.thingsappandroid.ui.theme.BorderGray
+import com.example.thingsappandroid.ui.theme.ErrorRed
+import com.example.thingsappandroid.ui.theme.TextFieldBackground
 import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary
 
@@ -30,39 +33,65 @@ fun CustomTextField(
     placeholder: String,
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: @Composable (() -> Unit)? = null
+    trailingIcon: @Composable (() -> Unit)? = null,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle = MaterialTheme.typography.bodyLarge // Added textStyle parameter
 ) {
-    Column {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = TextPrimary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Only render label if it's not empty
+        if (label.isNotEmpty()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            placeholder = { Text(placeholder) },
-
+            placeholder = { 
+                if (placeholder.isNotEmpty()) {
+                    Text(
+                        text = placeholder, 
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary
+                    ) 
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             visualTransformation = visualTransformation,
             trailingIcon = trailingIcon,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            isError = isError,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary,
-                focusedContainerColor = Color(0xFFF9F9F9),
-                unfocusedContainerColor = Color(0xFFF9F9F9),
-                disabledContainerColor = Color(0xFFF9F9F9),
-                unfocusedBorderColor = Color(0xFFE0E0E0),
-                focusedBorderColor = Color(0xFFE0E0E0),
+                focusedContainerColor = TextFieldBackground,
+                unfocusedContainerColor = TextFieldBackground,
+                disabledContainerColor = TextFieldBackground,
+                errorContainerColor = TextFieldBackground,
+                unfocusedBorderColor = BorderGray,
+                focusedBorderColor = TextPrimary,
+                errorBorderColor = ErrorRed,
                 cursorColor = TextPrimary,
-                unfocusedPlaceholderColor = TextSecondary,
-                focusedPlaceholderColor = TextSecondary
+                errorCursorColor = ErrorRed
             ),
-            singleLine = true
+            singleLine = true,
+            textStyle = textStyle // Use the passed textStyle
         )
+        if (isError && errorMessage != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.labelSmall,
+                color = ErrorRed
+            )
+        }
     }
 }
