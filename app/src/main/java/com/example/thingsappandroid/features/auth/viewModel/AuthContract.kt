@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth
+package com.example.thingsappandroid.features.auth.viewModel
 
 // 1. State
 data class AuthState(

@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth
+package com.example.thingsappandroid.features.auth.viewModel
 
 import android.annotation.SuppressLint
 import android.app.Application

@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.home
+package com.example.thingsappandroid.features.home.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*

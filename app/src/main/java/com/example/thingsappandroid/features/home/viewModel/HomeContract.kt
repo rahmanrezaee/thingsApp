@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.home
+package com.example.thingsappandroid.features.home.viewModel
 
 import com.example.thingsappandroid.services.ClimateData
 

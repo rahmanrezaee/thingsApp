@@ -17,7 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.thingsappandroid.features.auth.AuthEffect
+import com.example.thingsappandroid.features.auth.viewModel.AuthEffect
 import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
                             
                             androidx.compose.runtime.LaunchedEffect(Unit) {
                                 homeViewModel.effect.collectLatest { effect ->
-                                    if (effect is com.example.thingsappandroid.features.home.HomeEffect.NavigateToLogin) {
+                                    if (effect is com.example.thingsappandroid.features.home.viewModel.HomeEffect.NavigateToLogin) {
                                         navController.navigate(Screen.Login.route) {
                                             popUpTo(Screen.Home.route) { inclusive = true }
                                         }

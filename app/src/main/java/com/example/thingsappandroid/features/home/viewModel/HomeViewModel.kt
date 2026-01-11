@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.home
+package com.example.thingsappandroid.features.home.viewModel
 
 import android.annotation.SuppressLint
 import android.app.Application
