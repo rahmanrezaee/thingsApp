@@ -54,7 +54,7 @@ fun HomeBottomBar(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
                             tint = if (isSelected) ActivityGreen else Gray400,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     },
                     label = {

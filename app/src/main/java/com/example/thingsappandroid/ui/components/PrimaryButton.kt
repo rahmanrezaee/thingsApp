@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonElevation
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,6 +52,7 @@ fun PrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     containerColor: Color = PrimaryGreen,
     contentColor: Color = Color.White,
     border: BorderStroke? = null,
@@ -65,19 +67,19 @@ fun PrimaryButton(
     val scope = rememberCoroutineScope()
 
     val buttonOffsetY by animateDpAsState(
-        targetValue = if (isPressed && enabled) 2.dp else 0.dp,
+        targetValue = if (isPressed && enabled && !isLoading) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 100),
         label = "buttonOffset"
     )
 
     val shadowOffsetY by animateDpAsState(
-        targetValue = if (isPressed && enabled) 0.dp else 2.dp,
+        targetValue = if (isPressed && enabled && !isLoading) 0.dp else 2.dp,
         animationSpec = tween(durationMillis = 100),
         label = "shadowOffset"
     )
 
     val shadowAlpha by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0f else 0.12f,
+        targetValue = if (isPressed && enabled && !isLoading) 0f else 0.12f,
         animationSpec = tween(durationMillis = 100),
         label = "shadowAlpha"
     )
@@ -118,7 +120,7 @@ fun PrimaryButton(
                     }
                 )
                 .clickable(
-                    enabled = enabled,
+                    enabled = enabled && !isLoading,
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
                 ) {
@@ -131,31 +133,39 @@ fun PrimaryButton(
                 },
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                val painter = iconPainter ?: icon?.let { painterResource(id = it) }
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    val painter = iconPainter ?: icon?.let { painterResource(id = it) }
 
-                if (painter != null) {
-                    Icon(
-                        painter = painter,
-                        contentDescription = contentDescription,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .align(Alignment.CenterStart),
-                        tint = iconTint
+                    if (painter != null) {
+                        Icon(
+                            painter = painter,
+                            contentDescription = contentDescription,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .align(Alignment.CenterStart),
+                            tint = iconTint
+                        )
+                    }
+
+                    Text(
+                        text = text,
+                        style = textStyle,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (enabled) contentColor else contentColor.copy(alpha = 0.8f),
+                        modifier = Modifier.align(Alignment.Center)
                     )
                 }
-
-                Text(
-                    text = text,
-                    style = textStyle,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (enabled) contentColor else contentColor.copy(alpha = 0.8f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
             }
         }
     }

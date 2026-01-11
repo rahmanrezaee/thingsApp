@@ -2,84 +2,78 @@ package com.example.thingsappandroid.ui.components.visuals
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.theme.Gray100
-import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
+import com.example.thingsappandroid.ui.theme.BatteryYellow
+import com.example.thingsappandroid.ui.theme.Gray300
 
 @Composable
 fun ChargingConnectionLine(
-    modifier: Modifier = Modifier,
     isCharging: Boolean,
-    height: androidx.compose.ui.unit.Dp = 40.dp,
-    color: Color = Gray100
+    height: Dp = 48.dp
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "ChargingFlow")
+    val infiniteTransition = rememberInfiniteTransition(label = "Electricity")
     
-    val position by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 1f, // Start at bottom
+        targetValue = 0f, // End at top
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
+            animation = keyframes {
+                durationMillis = 1600
+                1f at 0
+                0f at 600 with LinearEasing
+                0f at 1600
+            },
             repeatMode = RepeatMode.Restart
         ),
-        label = "ElectronPosition"
+        label = "Progress"
     )
 
-    val boltPainter = rememberVectorPainter(Icons.Default.Bolt)
-    val iconSize = 14.dp
-
-    Canvas(modifier = modifier.width(20.dp).height(height)) {
-        val centerX = size.width / 2
-        val lineX = centerX
-        val lineWidth = 4.dp.toPx()
-        
-        drawLine(
-            color = color,
-            start = Offset(lineX, 0f),
-            end = Offset(lineX, size.height),
-            strokeWidth = lineWidth,
-            cap = StrokeCap.Round
-        )
+    Box(
+        modifier = Modifier
+            .width(24.dp)
+            .height(height),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        // Static connection line
+        Canvas(modifier = Modifier.fillMaxHeight().width(2.dp)) {
+            drawLine(
+                color = Gray300,
+                start = Offset(size.width / 2, 0f),
+                end = Offset(size.width / 2, size.height),
+                strokeWidth = 2.dp.toPx()
+            )
+        }
 
         if (isCharging) {
-            val currentY = size.height - (size.height * position)
-            
-            drawCircle(
-                color = Color(0xFF404040),
-                radius = 10.dp.toPx(),
-                center = Offset(centerX, currentY)
-            )
-            
-            translate(
-                left = centerX - iconSize.toPx() / 2,
-                top = currentY - iconSize.toPx() / 2
+            // Moving Icon Component
+            Box(
+                modifier = Modifier
+                    .offset(y = height * progress - 12.dp) // -12dp to center the 24dp box on the progress point
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(BatteryYellow),
+                contentAlignment = Alignment.Center
             ) {
-                with(boltPainter) {
-                    draw(size = Size(iconSize.toPx(), iconSize.toPx()), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White))
-                }
+                Icon(
+                    imageVector = Icons.Default.ElectricBolt,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ChargingConnectionLinePreview() {
-    ThingsAppAndroidTheme {
-        ChargingConnectionLine(isCharging = true)
     }
 }

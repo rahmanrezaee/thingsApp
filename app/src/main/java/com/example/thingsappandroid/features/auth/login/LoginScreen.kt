@@ -24,9 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +38,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.thingsappandroid.R
+import com.example.thingsappandroid.features.auth.AuthIntent
+import com.example.thingsappandroid.features.auth.AuthViewModel
 import com.example.thingsappandroid.ui.components.CustomTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.BorderGray
@@ -50,26 +50,19 @@ import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun LoginScreen(
-    onLoginClick: () -> Unit,
-    onGuestClick: () -> Unit,
-    onGoogleClick: () -> Unit,
-    onFacebookClick: () -> Unit,
-    onSignUpClick: () -> Unit,
-    onForgotPasswordClick: () -> Unit
-) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isPasswordVisible by remember { mutableStateOf(false) }
+fun LoginScreen() {
+    val viewModel: AuthViewModel = viewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     Box(modifier = Modifier.fillMaxSize()) {
         // Background Image could go here if needed
-        
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -99,8 +92,8 @@ fun LoginScreen(
 
             // Form
             CustomTextField(
-                value = email,
-                onValueChange = { email = it },
+                value = state.email,
+                onValueChange = { viewModel.dispatch(AuthIntent.UpdateEmail(it)) },
                 label = stringResource(R.string.email_label),
                 placeholder = stringResource(R.string.email_placeholder),
                 keyboardType = KeyboardType.Email
@@ -109,17 +102,17 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             CustomTextField(
-                value = password,
-                onValueChange = { password = it },
+                value = state.password,
+                onValueChange = { viewModel.dispatch(AuthIntent.UpdatePassword(it)) },
                 label = stringResource(R.string.password_label),
                 placeholder = stringResource(R.string.password_placeholder),
                 keyboardType = KeyboardType.Password,
-                visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                visualTransformation = if (state.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                    IconButton(onClick = { viewModel.dispatch(AuthIntent.TogglePasswordVisibility) }) {
                         Icon(
-                            imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = stringResource(if (isPasswordVisible) R.string.hide_password_desc else R.string.show_password_desc),
+                            imageVector = if (state.isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = stringResource(if (state.isPasswordVisible) R.string.hide_password_desc else R.string.show_password_desc),
                             tint = TextSecondary
                         )
                     }
@@ -138,7 +131,7 @@ fun LoginScreen(
                     color = PrimaryGreen,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onForgotPasswordClick() }
+                    modifier = Modifier.clickable { viewModel.dispatch(AuthIntent.NavigateToForgotPassword) }
                 )
             }
 
@@ -147,8 +140,9 @@ fun LoginScreen(
             // Sign In Button with High Elevation
             PrimaryButton(
                 text = stringResource(R.string.sign_in_button),
-                onClick = onLoginClick,
+                onClick = { viewModel.dispatch(AuthIntent.Login) },
                 enabled = true, // Enabled by default or add validation logic here
+                isLoading = state.isLoginLoading
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -173,10 +167,11 @@ fun LoginScreen(
             // Guest Button
             PrimaryButton(
                 text = stringResource(R.string.guest_continue),
-                onClick = onGuestClick,
+                onClick = { viewModel.dispatch(AuthIntent.GuestLogin) },
                 containerColor = Color.White,
                 contentColor = TextPrimary,
                 border = BorderStroke(1.dp, BorderGray),
+                isLoading = state.isGuestLoading
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -184,11 +179,12 @@ fun LoginScreen(
             // Google Button
             PrimaryButton(
                 text = stringResource(R.string.google_continue),
-                onClick = onGoogleClick,
+                onClick = { viewModel.dispatch(AuthIntent.GoogleLogin) },
                 containerColor = Color.White,
                 contentColor = TextPrimary,
                 border = BorderStroke(1.dp, BorderGray),
-                icon = R.drawable.ic_google
+                icon = R.drawable.ic_google,
+                isLoading = state.isGoogleLoading
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -196,11 +192,12 @@ fun LoginScreen(
             // Facebook Button
             PrimaryButton(
                 text = stringResource(R.string.facebook_continue),
-                onClick = onFacebookClick,
+                onClick = { viewModel.dispatch(AuthIntent.FacebookLogin) },
                 containerColor = Color.White,
                 contentColor = TextPrimary,
                 border = BorderStroke(1.dp, BorderGray),
-                icon = R.drawable.ic_facebook
+                icon = R.drawable.ic_facebook,
+                isLoading = state.isFacebookLoading
             )
 
             Spacer(modifier = Modifier.height(48.dp))
@@ -214,7 +211,7 @@ fun LoginScreen(
                         append(stringResource(R.string.sign_up_link))
                     }
                 },
-                modifier = Modifier.clickable { onSignUpClick() },
+                modifier = Modifier.clickable { viewModel.dispatch(AuthIntent.NavigateToSignUp) },
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextPrimary
             )
@@ -228,13 +225,6 @@ fun LoginScreen(
 @Composable
 fun LoginScreenPreview() {
     ThingsAppAndroidTheme {
-        LoginScreen(
-            onLoginClick = {},
-            onGuestClick = {},
-            onGoogleClick = {},
-            onFacebookClick = {},
-            onSignUpClick = {},
-            onForgotPasswordClick = {}
-        )
+        LoginScreen()
     }
 }

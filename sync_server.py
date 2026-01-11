@@ -14,7 +14,7 @@ import shutil
 #  GENCLAUDE SYNC SERVER V14.8 (With Interactive Selector)
 # -------------------------------------------------------
 
-NGROK_AUTH_TOKEN = "1XWWJL7UatlcC4ZpnfRT8LsrbEq_6QsrUjFRZpoVZNAp8mgwd"
+NGROK_AUTH_TOKEN = "383BIfZtmGRtYGuy758oRkGHmc5_7JyGLLwTrtnWmsGjcvKZ6"
 
 try:
     from flask import Flask, request, jsonify, make_response, Response
@@ -404,6 +404,8 @@ def start_observer():
     observer.start()
     return observer
 
+
+
 # --- Routes ---
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -518,7 +520,7 @@ if __name__ == '__main__':
     if HAS_NGROK and (NGROK_AUTH_TOKEN or os.environ.get("NGROK_AUTHTOKEN")):
         try:
             ngrok.set_auth_token(NGROK_AUTH_TOKEN or os.environ.get("NGROK_AUTHTOKEN"))
-            print(f" {C_GREEN}✔ Ngrok: {C_BOLD}{ngrok.connect(8000).public_url}{C_RESET}")
+            print(f" {C_GREEN}✔ Ngrok: {C_BOLD}{ngrok.connect(8001).public_url}{C_RESET}")
         except: pass
 
     print(f" {C_GREEN}✔ Local: {C_BOLD}http://127.0.0.1:8000{C_RESET}")
@@ -526,6 +528,6 @@ if __name__ == '__main__':
     print(f" {C_GREEN}✨ Server is running! Press Ctrl+C to stop.{C_RESET}")
     print(f"{C_CYAN}{'='*70}{C_RESET}\n")
 
-    try: app.run(port=8000, debug=False, threaded=True)
+    try: app.run(port=8001, debug=False, threaded=True)
     finally:
         if observer: observer.stop(); observer.join()

@@ -130,6 +130,68 @@ fun BatteryLiquidIndicator(
 }
 
 @Composable
+fun CarbonBatteryIcon(
+    modifier: Modifier = Modifier,
+    level: Float // 0f to 1f
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 2.5.dp.toPx()
+        val halfStroke = strokeWidth / 2
+        
+        val capWidth = 14.dp.toPx()
+        val capHeight = 3.dp.toPx()
+        val bodyTop = 4.dp.toPx()
+        
+        val bodyBounds = Rect(
+            left = halfStroke,
+            top = bodyTop + halfStroke,
+            right = w - halfStroke,
+            bottom = h - halfStroke
+        )
+        val bodyCornerRadius = CornerRadius(4.dp.toPx())
+
+        // Draw Fill (Bottom up)
+        val fillHeight = bodyBounds.height * level.coerceIn(0f, 1f)
+        val fillTop = bodyBounds.bottom - fillHeight
+        
+        if (fillHeight > 0) {
+            drawRoundRect(
+                color = Color(0xFF1E1E1E), // Dark fill
+                topLeft = Offset(bodyBounds.left, fillTop),
+                size = Size(bodyBounds.width, fillHeight),
+                cornerRadius = if (level > 0.9f) bodyCornerRadius else CornerRadius(0f) 
+                // Simplified corner logic: strictly normally we'd clip, but for this style flat top is ok for partial fill
+            )
+            // Re-draw rounded bottom to ensure corner shape if fill is small, 
+            // or better: use clipPath like liquid battery if perfection needed. 
+            // For this specific UI style (outline), let's just stick to the outline on top.
+        }
+
+        val outlineColor = Color(0xFF1E1E1E)
+        
+        // Cap
+        val capLeft = (w - capWidth) / 2
+        drawRoundRect(
+            color = outlineColor,
+            topLeft = Offset(capLeft, halfStroke),
+            size = Size(capWidth, capHeight),
+            cornerRadius = CornerRadius(1.dp.toPx())
+        )
+
+        // Body Outline
+        drawRoundRect(
+            color = outlineColor,
+            topLeft = bodyBounds.topLeft,
+            size = bodyBounds.size,
+            cornerRadius = bodyCornerRadius,
+            style = Stroke(width = strokeWidth)
+        )
+    }
+}
+
+@Composable
 fun ChargingRippleEffect(
     modifier: Modifier = Modifier,
     isActive: Boolean

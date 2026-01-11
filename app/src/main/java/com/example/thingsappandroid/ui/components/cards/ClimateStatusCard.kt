@@ -22,6 +22,10 @@ import com.example.thingsappandroid.R
 import com.example.thingsappandroid.services.ClimateData
 import com.example.thingsappandroid.ui.theme.*
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.outlined.EnergySavingsLeaf
+
 @Composable
 fun ClimateStatusCard(
     data: ClimateData = ClimateData(
@@ -33,61 +37,93 @@ fun ClimateStatusCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(140.dp) // Slightly taller for better spacing
             .shadow(
-                elevation = 15.dp,
+                elevation = 12.dp,
                 shape = Shapes.large,
-                spotColor = data.gradientColors.first().copy(alpha = 0.4f),
-                ambientColor = data.gradientColors.first().copy(alpha = 0.4f)
+                spotColor = data.gradientColors.first().copy(alpha = 0.3f),
+                ambientColor = data.gradientColors.first().copy(alpha = 0.3f)
             )
             .background(
-                brush = Brush.radialGradient(
+                brush = Brush.linearGradient(
                     colors = data.gradientColors,
-                    center = Offset.Unspecified,
-                    radius = 600f
+                    start = Offset(0f, 0f),
+                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 ),
                 shape = Shapes.large
             )
             .clip(Shapes.large)
     ) {
+        // Content
         Column(
             modifier = Modifier
-                .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(20.dp)
+                .fillMaxSize()
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
                 Text(
                     text = "Device Climate Status",
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontWeight = FontWeight.Medium
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp
                     )
                 )
-                Text(
-                    text = data.title,
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        color = Color.White
+                
+                // Icon in circle
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color.White.copy(alpha = 0.2f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = "Power",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
-                )
+                }
             }
-
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Big Status Text
+            Text(
+                text = data.title,
+                style = MaterialTheme.typography.displaySmall.copy(
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 36.sp
+                )
+            )
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            // Footer Description
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_power),
-                    contentDescription = "Power",
+                    imageVector = Icons.Outlined.EnergySavingsLeaf, // Fallback to leaf or similar
+                    contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
                 Text(
                     text = data.description,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 14.sp
-                    )
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    maxLines = 1
                 )
             }
         }
