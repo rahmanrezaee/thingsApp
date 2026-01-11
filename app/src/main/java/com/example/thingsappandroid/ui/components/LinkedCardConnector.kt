@@ -25,10 +25,10 @@ import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.ui.components.cards.BatteryCard
 import com.example.thingsappandroid.ui.components.cards.CarbonCard
 import com.example.thingsappandroid.ui.components.cards.ClimateStatusCard
+import com.example.thingsappandroid.ui.components.layout.LinkedCardConnector
 import com.example.thingsappandroid.ui.components.visuals.ChargingConnectionLine
 import com.example.thingsappandroid.ui.components.visuals.GreenConnectorComponent
 import com.example.thingsappandroid.ui.components.visuals.LowCarbonComponent
-import com.example.thingsappandroid.ui.theme.ActivityGreen
 
 // =================================================================================================
 // SECTION: CONFIGURATION (COLORS)

@@ -14,10 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.ui.theme.BatteryYellow
 import com.example.thingsappandroid.ui.theme.Gray300
+import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable
 fun ChargingConnectionLine(
@@ -52,8 +54,8 @@ fun ChargingConnectionLine(
             drawLine(
                 color = Gray300,
                 start = Offset(size.width / 2, 0f),
-                end = Offset(size.width / 2, size.height),
-                strokeWidth = 2.dp.toPx()
+                end = Offset(size.width / 2, size.height + 10),
+                strokeWidth = 3.dp.toPx()
             )
         }
 
@@ -62,7 +64,7 @@ fun ChargingConnectionLine(
             Box(
                 modifier = Modifier
                     .offset(y = height * progress - 12.dp) // -12dp to center the 24dp box on the progress point
-                    .size(24.dp)
+                    .size(20.dp)
                     .clip(CircleShape)
                     .background(BatteryYellow),
                 contentAlignment = Alignment.Center
@@ -71,9 +73,18 @@ fun ChargingConnectionLine(
                     imageVector = Icons.Default.ElectricBolt,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(12.dp)
                 )
             }
         }
+    }
+}
+
+
+@Preview(showBackground = true)
+@Composable
+fun ChargingConnectionLinePreview() {
+    ThingsAppAndroidTheme {
+        ChargingConnectionLine(isCharging = true)
     }
 }

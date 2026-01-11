@@ -7,11 +7,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.ui.components.common.BatteryLiquidIndicator
 import com.example.thingsappandroid.ui.components.common.ChargingRippleEffect
 import com.example.thingsappandroid.ui.theme.*
@@ -23,93 +21,82 @@ fun BatteryCard(
     isCharging: Boolean = true
 ) {
     Card(
-        modifier = modifier.height(200.dp),
+        modifier = modifier.height(150.dp),
         shape = Shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)), // Very light gray/white
+        colors = CardDefaults.cardColors(containerColor = Gray100),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Header
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "Electricity",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        color = Gray900,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                )
-                Text(
-                    text = "80,000 mWh",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = Gray500,
-                        fontSize = 12.sp
-                    )
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (isCharging) {
+                ChargingRippleEffect(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .align(Alignment.Center),
+                    isActive = true
                 )
             }
-            
-            // Content
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.fillMaxWidth()
+
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxSize()
             ) {
-                // Battery Visual
-                Box(contentAlignment = Alignment.BottomCenter) {
-                    if (isCharging) {
-                        ChargingRippleEffect(
-                            modifier = Modifier.size(90.dp).offset(y = 10.dp),
-                            isActive = true
-                        )
-                    }
-                    BatteryLiquidIndicator(
-                        modifier = Modifier
-                            .width(48.dp)
-                            .height(80.dp),
-                        level = batteryLevel,
-                        isAnimating = isCharging,
-                        colorStart = BatteryGradientStart,
-                        colorEnd = BatteryGradientEnd
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Device Battery",
+                        style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
+                    )
+                    Text(
+                        text = "80,000 mWh",
+                        style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
-                // Stats
                 Column(
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    verticalArrangement = Arrangement.Bottom
+                    modifier = Modifier.padding(start = 56.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "${(batteryLevel * 100).toInt()}%",
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            color = Gray900,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 28.sp
-                        )
+                        style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
                     )
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
                     HorizontalDivider(color = Gray300, thickness = 1.dp)
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
-                    Text(
-                        text = if (isCharging) "Charging" else "Not Charging",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = Gray400,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (isCharging) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = "Charging",
+                                tint = BatteryYellow,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        Text(
+                            text = if (isCharging) "Charging" else "On Battery",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = if (isCharging) BatteryYellow else Gray500,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
-                    )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
+
+            BatteryLiquidIndicator(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 21.dp, bottom = 21.dp)
+                    .width(38.dp)
+                    .height(65.dp),
+                level = batteryLevel,
+                isAnimating = isCharging,
+                colorStart = BatteryGradientStart,
+                colorEnd = BatteryGradientEnd
+            )
         }
     }
 }
