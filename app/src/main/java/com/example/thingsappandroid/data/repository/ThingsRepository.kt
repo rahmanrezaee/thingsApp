@@ -20,11 +20,20 @@ class ThingsRepository {
     private fun createDefaultDeviceInfoResponse(deviceId: String): DeviceInfoResponse {
         return DeviceInfoResponse(
             deviceId = deviceId,
+            alias = "My Device",
+            commencementDate = null,
+            thingId = null,
             climateStatus = null,
             totalAvoided = 0.0,
+            totalEmissions = 0.0,
             totalConsumed = 0.0,
+            totalBudget = 0.0,
+            remainingBudget = 0.0,
+            userId = null,
             stationInfo = null,
-            carbonInfo = null
+            organizationInfo = null,
+            carbonInfo = null,
+            versionInfo = null
         )
     }
 
@@ -55,6 +64,7 @@ class ThingsRepository {
                 val response = api.getToken(mapOf("DeviceId" to deviceId))
                 if (response.isSuccessful) {
                     authToken = response.body()?.token
+                    NetworkModule.setAuthToken(authToken)
                     Log.d("ThingsRepo", "Authentication Successful (Status: ${response.code()}). Token: ${authToken?.take(10)}...")
                     authToken
                 } else {
@@ -76,10 +86,8 @@ class ThingsRepository {
     suspend fun syncDeviceInfo(deviceId: String): DeviceInfoResponse? {
         return withContext(Dispatchers.IO) {
             try {
-                // Get device serial number (handles SDK versions internally)
+                // 1. Register Device
                 val serialNumber = getDeviceSerialNumber()
-
-                // Registering device first
                 val registerResponse = api.registerDevice(
                     RegisterDeviceRequest(
                         deviceId = deviceId,
@@ -91,21 +99,40 @@ class ThingsRepository {
                     )
                 )
 
-                if (registerResponse.isSuccessful) {
-                    Log.d("ThingsRepo", "Device registration successful (Status: ${registerResponse.code()}). Serial: $serialNumber")
-                    Log.d("ThingsRepo", "Skipping device info fetch and proceeding with authentication")
+                if (!registerResponse.isSuccessful) {
+                    Log.w("ThingsRepo", "Registration failed: ${registerResponse.code()}. Trying to fetch info anyway.")
+                }
 
-                    // Skip device info fetching, just return default response for successful registration
-                    createDefaultDeviceInfoResponse(deviceId)
+                // 2. Fetch Device Info (Full sync)
+                val infoResponse = api.getDeviceInfo(DeviceInfoRequest(deviceId = deviceId))
+                
+                if (infoResponse.isSuccessful && infoResponse.body() != null) {
+                    infoResponse.body()
                 } else {
-                    Log.e("ThingsRepo", "Device registration failed. Status: ${registerResponse.code()}, Error: ${registerResponse.errorBody()?.string()}")
-                    null
+                    Log.w("ThingsRepo", "Get Device Info failed: ${infoResponse.code()}. Using default.")
+                    createDefaultDeviceInfoResponse(deviceId)
                 }
             } catch (e: Exception) {
-                Log.e("ThingsRepo", "CRITICAL: Sync Info failed. Cause: ${e.javaClass.simpleName}, Msg: ${e.message}", e)
-                // Returning null to indicate failure (ViewModel should handle this UI state)
+                Log.e("ThingsRepo", "Sync Info failed: ${e.message}", e)
                 null
             }
+        }
+    }
+
+    suspend fun updateAlias(deviceId: String, newAlias: String): Boolean {
+        return try {
+            val response = api.setDeviceAlias(SetDeviceAliasRequest(deviceId, newAlias))
+            response.isSuccessful
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun getCarbonIntensity(lat: Double, lon: Double): LatestIntensityResponse? {
+        return try {
+            api.getLatestIntensity(GetLatestIntensityRequest(lat, lon)).body()
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -125,23 +152,26 @@ class ThingsRepository {
                         deviceId = deviceId,
                         totalWatts = watts,
                         totalWattHours = kwh,
-                        totalGramsCO2 = kwh * 400,
+                        totalGramsCO2 = kwh * 400, // Estimation if not provided by server
                         from = now.minusSeconds(60).toString(),
                         to = now.toString(),
                         batteryLevelFrom = batteryLevel,
                         batteryLevelTo = batteryLevel,
-                        isCharging = isCharging
+                        isCharging = isCharging,
+                        // New fields defaults
+                        sourceType = "Battery",
+                        batteryCapacity = 5000.0, // Example hardcode or fetch from power manager
+                        emissionFactor = 0.0
                     )
                 )
                 val response = api.addDeviceConsumption(request)
                 if (response.isSuccessful) {
                     Log.d("ThingsRepo", "Consumption upload successful (Status: ${response.code()})")
                 } else {
-                    Log.d("ThingsRepo", "Consumption upload failed (Status: ${response.code()}) - Offline/Demo mode")
+                    Log.d("ThingsRepo", "Consumption upload failed (Status: ${response.code()})")
                 }
             } catch (e: Exception) {
-                // Silent failure in guest/demo mode is acceptable
-                Log.d("ThingsRepo", "Upload failed (Offline/Demo mode): ${e.message}")
+                Log.d("ThingsRepo", "Upload failed: ${e.message}")
             }
         }
     }

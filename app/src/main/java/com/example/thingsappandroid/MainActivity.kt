@@ -18,16 +18,19 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.thingsappandroid.features.auth.AuthEffect
-import com.example.thingsappandroid.features.auth.forgotpassword.ForgotPasswordScreen
+import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
 import com.example.thingsappandroid.data.repository.ThingsRepository
-import com.example.thingsappandroid.features.auth.AuthViewModel
-import com.example.thingsappandroid.features.auth.login.LoginScreen
-import com.example.thingsappandroid.features.auth.signup.SignUpScreen
+import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
+import com.example.thingsappandroid.features.auth.screens.LoginScreen
+import com.example.thingsappandroid.features.auth.screens.SignUpScreen
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
-import com.example.thingsappandroid.features.auth.verify.VerifyScreen
+import com.example.thingsappandroid.features.auth.screens.VerifyScreen
 import com.example.thingsappandroid.features.onboarding.OnboardingScreen
-import com.example.thingsappandroid.features.home.HomeScreen
+import com.example.thingsappandroid.features.home.screens.HomeScreen
+import com.example.thingsappandroid.features.splash.SplashScreen
+import com.example.thingsappandroid.features.splash.SplashViewModel
+import com.example.thingsappandroid.features.splash.SplashEffect
 import com.example.thingsappandroid.navigation.Screen
 import com.example.thingsappandroid.ui.components.GlobalMessageHost
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
@@ -58,17 +61,37 @@ class MainActivity : ComponentActivity() {
                 val tokenManager = remember { TokenManager(context) }
                 val preferenceManager = remember { PreferenceManager(context) }
 
-                val startDestination = when {
-                    tokenManager.hasToken() -> Screen.Home.route
-                    preferenceManager.isOnboardingCompleted() -> Screen.Login.route
-                    else -> Screen.Onboarding.route
-                }
-
                 Box(modifier = Modifier.fillMaxSize()) {
                     NavHost(
                         navController = navController,
-                        startDestination = startDestination
+                        startDestination = "splash_route"
                     ) {
+                        composable("splash_route") {
+                            val splashViewModel: SplashViewModel = viewModel()
+                            androidx.compose.runtime.LaunchedEffect(Unit) {
+                                splashViewModel.effect.collectLatest { effect ->
+                                    when (effect) {
+                                        is SplashEffect.NavigateToHome -> {
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo("splash_route") { inclusive = true }
+                                            }
+                                        }
+                                        is SplashEffect.NavigateToLogin -> {
+                                            navController.navigate(Screen.Login.route) {
+                                                popUpTo("splash_route") { inclusive = true }
+                                            }
+                                        }
+                                        is SplashEffect.NavigateToOnboarding -> {
+                                            navController.navigate(Screen.Onboarding.route) {
+                                                popUpTo("splash_route") { inclusive = true }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            SplashScreen()
+                        }
+
                         composable(Screen.Onboarding.route) {
                             OnboardingScreen(
                                 onOnboardingFinished = {
@@ -172,7 +195,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable(Screen.Home.route) {
-                            val homeViewModel: com.example.thingsappandroid.features.home.HomeViewModel = viewModel()
+                            val homeViewModel: com.example.thingsappandroid.features.home.viewModel.HomeViewModel = viewModel()
                             
                             androidx.compose.runtime.LaunchedEffect(Unit) {
                                 homeViewModel.effect.collectLatest { effect ->

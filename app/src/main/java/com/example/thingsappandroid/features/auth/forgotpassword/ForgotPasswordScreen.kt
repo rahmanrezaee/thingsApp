@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth.forgotpassword
+package com.example.thingsappandroid.features.auth.screens
 
 import android.util.Patterns
 import androidx.compose.foundation.clickable

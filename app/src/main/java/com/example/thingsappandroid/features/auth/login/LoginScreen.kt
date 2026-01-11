@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth.login
+package com.example.thingsappandroid.features.auth.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.features.auth.AuthIntent
-import com.example.thingsappandroid.features.auth.AuthViewModel
+import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.ui.components.CustomTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.BorderGray

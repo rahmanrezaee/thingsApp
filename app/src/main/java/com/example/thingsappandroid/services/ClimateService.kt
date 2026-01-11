@@ -19,14 +19,24 @@ class ClimateService {
         gradientColors = listOf(PrimaryGreen, DarkGreen)
     )
 
+    private val notGreenData = ClimateData(
+        title = "Not Green",
+        description = "Energy source exceeds carbon limits.",
+        gradientColors = listOf(Color(0xFFE57373), Color(0xFFD32F2F)) // Red gradient
+    )
+
     private val _climateData = MutableStateFlow(greenData)
     val climateData: StateFlow<ClimateData> = _climateData.asStateFlow()
 
-    private var isSimulating = false
 
-    suspend fun startSimulation() {
-        if (isSimulating) return
-        isSimulating = true
-        // Logic to fetch or update climate status would go here
+
+    fun getMappedClimateData(status: String?): ClimateData {
+        if (status == null) return greenData
+        
+        return when {
+            status.contains("GreenOn", ignoreCase = true) -> greenData
+            status.contains("NotGreen", ignoreCase = true) -> notGreenData
+            else -> greenData
+        }
     }
 }

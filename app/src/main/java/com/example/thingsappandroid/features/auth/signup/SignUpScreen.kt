@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth.signup
+package com.example.thingsappandroid.features.auth.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable

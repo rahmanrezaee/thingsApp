@@ -3,6 +3,7 @@ package com.example.thingsappandroid.data.local
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import androidx.core.content.edit
 
 class TokenManager(context: Context) {
     private val masterKey = MasterKey.Builder(context)
@@ -18,7 +19,7 @@ class TokenManager(context: Context) {
     )
 
     fun saveToken(token: String) {
-        sharedPreferences.edit().putString("auth_token", token).apply()
+        sharedPreferences.edit { putString("auth_token", token) }
     }
 
     fun getToken(): String? {
@@ -26,7 +27,7 @@ class TokenManager(context: Context) {
     }
 
     fun clearToken() {
-        sharedPreferences.edit().remove("auth_token").apply()
+        sharedPreferences.edit { remove("auth_token") }
     }
 
     fun hasToken(): Boolean {

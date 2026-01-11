@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.auth.verify
+package com.example.thingsappandroid.features.auth.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -39,7 +39,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.R
-import com.example.thingsappandroid.ui.components.OtpTextField
+import com.example.thingsappandroid.features.auth.components.OtpTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.TextPrimary
