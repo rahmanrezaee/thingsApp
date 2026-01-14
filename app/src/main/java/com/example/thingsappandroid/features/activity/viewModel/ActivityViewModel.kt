@@ -16,9 +16,8 @@ import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
-import com.example.thingsappandroid.services.BatteryService
-import com.example.thingsappandroid.services.ClimateService
-import com.example.thingsappandroid.services.EnergyService
+import com.example.thingsappandroid.services.BatteryMonitor
+import com.example.thingsappandroid.util.ClimateUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -32,9 +31,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     // Dependencies
     private val repository = ThingsRepository()
     private val tokenManager = TokenManager(application)
-    private val batteryService = BatteryService(application)
-    private val energyService = EnergyService(application)
-    private val climateService = ClimateService()
+    private val batteryMonitor = BatteryMonitor(application)
 
     // MVI State
     private val _state = MutableStateFlow(ActivityState())
@@ -170,14 +167,14 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                     try {
                         val statusInt = climateStatusStr.toIntOrNull()
                         if (statusInt != null) {
-                            climateService.getMappedClimateData(statusInt)
+                            ClimateUtils.getMappedClimateData(statusInt)
                         } else {
-                            climateService.getMappedClimateData(climateStatusStr)
+                            ClimateUtils.getMappedClimateData(climateStatusStr)
                         }
                     } catch (e: Exception) {
-                        climateService.getMappedClimateData(climateStatusStr)
+                        ClimateUtils.getMappedClimateData(climateStatusStr)
                     }
-                } ?: climateService.getMappedClimateData(null as String?)
+                } ?: ClimateUtils.getMappedClimateData(null as String?)
 
                 _state.update {
                     it.copy(
@@ -226,23 +223,20 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         // Combine local flows into State
         viewModelScope.launch {
             combine(
-                batteryService.batteryLevel,
-                batteryService.isCharging,
-                energyService.isWifiConnected,
-                energyService.consumption
+                batteryMonitor.batteryLevel,
+                batteryMonitor.isCharging,
+                batteryMonitor.consumption
             ) { args: Array<Any?> ->
                 args
             }.collect { args ->
                 val battery = args[0] as Float
                 val charging = args[1] as Boolean
-                val wifi = args[2] as Boolean
-                val consumption = args[3] as Float
+                val consumption = args[2] as Float
 
                 _state.update {
                     it.copy(
                         batteryLevel = battery,
                         isCharging = charging,
-                        isWifiConnected = wifi,
                         currentUsageKwh = consumption
                     )
                 }
@@ -281,14 +275,11 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun startServices() {
-        batteryService.startMonitoring()
-        energyService.startMonitoring()
-        viewModelScope.launch { energyService.startSimulationLoop() }
+        batteryMonitor.startMonitoring()
     }
 
     override fun onCleared() {
         super.onCleared()
-        batteryService.stopMonitoring()
-        energyService.stopMonitoring()
+        batteryMonitor.stopMonitoring()
     }
 }

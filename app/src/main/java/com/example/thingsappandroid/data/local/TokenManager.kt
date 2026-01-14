@@ -33,4 +33,12 @@ class TokenManager(context: Context) {
     fun hasToken(): Boolean {
         return sharedPreferences.contains("auth_token")
     }
+
+    fun saveDeviceId(deviceId: String) {
+        sharedPreferences.edit { putString("device_id", deviceId) }
+    }
+
+    fun getDeviceId(): String? {
+        return sharedPreferences.getString("device_id", null)
+    }
 }

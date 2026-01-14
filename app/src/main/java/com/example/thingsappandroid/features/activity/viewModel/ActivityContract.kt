@@ -1,12 +1,11 @@
 package com.example.thingsappandroid.features.activity.viewModel
 
 import com.example.thingsappandroid.data.model.DeviceInfoResponse
-import com.example.thingsappandroid.services.ClimateData
+import com.example.thingsappandroid.util.ClimateData
 
 // 1. State
 data class ActivityState(
     val isLoading: Boolean = false,
-    val isWifiConnected: Boolean = false,
     val batteryLevel: Float = 0f,
     val isCharging: Boolean = false,
     val deviceName: String = "",

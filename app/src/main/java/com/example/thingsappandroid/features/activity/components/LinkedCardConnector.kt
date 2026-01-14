@@ -254,8 +254,8 @@ private fun ConnectorGraphic(
                         drawPath(
                             segmentPath,
                             brush = Brush.linearGradient(
-                                0f to flowColor.copy(alpha = 0f),
-                                1f to flowColor,
+                                0f to flowColor,
+                                1f to flowColor.copy(alpha = 0f),
                                 start = startPos,
                                 end = endPos
                             ),

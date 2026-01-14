@@ -23,7 +23,6 @@ import com.example.thingsappandroid.ui.theme.*
 
 @Composable
 fun ConnectionStatusRow(
-    isWifiConnected: Boolean = true,
     carbonIntensity: Int = 96
 ) {
     Row(
@@ -41,13 +40,9 @@ fun ConnectionStatusRow(
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isWifiConnected) {
-                            Brush.linearGradient(
-                                colors = listOf(GreenFiGradientStart, GreenFiGradientEnd)
-                            )
-                        } else {
-                            Brush.linearGradient(colors = listOf(Gray400, Gray600))
-                        }
+                        Brush.linearGradient(
+                            colors = listOf(GreenFiGradientStart, GreenFiGradientEnd)
+                        )
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -59,7 +54,7 @@ fun ConnectionStatusRow(
                 )
             }
             Text(
-                text = if (isWifiConnected) "Green Fi Station\nConnected" else "Green Fi Station\nDisconnected",
+                text = "Green Fi Station\nConnected",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
                     color = Gray800,

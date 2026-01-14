@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.thingsappandroid.services.ClimateData
+import com.example.thingsappandroid.util.ClimateData
 import com.example.thingsappandroid.ui.theme.*
 
 import androidx.compose.material.icons.Icons

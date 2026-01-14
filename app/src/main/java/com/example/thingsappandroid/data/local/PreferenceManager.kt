@@ -12,4 +12,12 @@ class PreferenceManager(context: Context) {
     fun setOnboardingCompleted(completed: Boolean) {
         sharedPreferences.edit().putBoolean("onboarding_completed", completed).apply()
     }
+
+    fun saveDeviceId(deviceId: String) {
+        sharedPreferences.edit().putString("device_id", deviceId).apply()
+    }
+
+    fun getDeviceId(): String? {
+        return sharedPreferences.getString("device_id", null)
+    }
 }

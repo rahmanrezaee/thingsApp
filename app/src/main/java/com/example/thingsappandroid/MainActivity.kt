@@ -1,8 +1,12 @@
 package com.example.thingsappandroid
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
+import com.example.thingsappandroid.services.BatteryService
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -91,12 +96,17 @@ class MainActivity : ComponentActivity() {
     val locationPermissionGranted: Boolean
         get() = _locationPermissionGranted
 
-    // Location permission request launcher
-    private val locationPermissionLauncher = registerForActivityResult(
+    // Permission request launcher for location and notifications
+    private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: true // Default to true for older versions
+        } else {
+            true
+        }
 
         _locationPermissionGranted = fineLocationGranted || coarseLocationGranted
 
@@ -105,9 +115,13 @@ class MainActivity : ComponentActivity() {
         } else {
             Toast.makeText(this, "Location permission is required to use this app.", Toast.LENGTH_LONG).show()
         }
+
+        if (!notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, "Notification permission recommended for background service.", Toast.LENGTH_SHORT).show()
+        }
     }
 
-    private fun checkAndRequestLocationPermissions() {
+    private fun checkAndRequestPermissions() {
         val fineLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -116,25 +130,81 @@ class MainActivity : ComponentActivity() {
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
+        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
         _locationPermissionGranted = fineLocationGranted || coarseLocationGranted
 
-        if (!_locationPermissionGranted) {
-            // Request both permissions
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (!fineLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (!coarseLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (!notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 
+    private fun startChargingDetectionService() {
+        try {
+            val serviceIntent = Intent(this, BatteryService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Log.d("MainActivity", "Starting foreground service")
+                startForegroundService(serviceIntent)
+            } else {
+                Log.d("MainActivity", "Starting background service")
+                startService(serviceIntent)
+            }
+            Log.d("MainActivity", "Service start command issued")
+
+            // Check if service is running after a short delay
+            android.os.Handler(mainLooper).postDelayed({
+                if (isServiceRunning(BatteryService::class.java)) {
+                    Log.d("MainActivity", "Service is confirmed running")
+                    runOnUiThread {
+                        Toast.makeText(this, "Background service started", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Log.w("MainActivity", "Service may not be running")
+                    runOnUiThread {
+                        Toast.makeText(this, "Service start failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }, 2000)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to start service", e)
+            Toast.makeText(this, "Failed to start background service", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        for (service in manager.getRunningServices(Int.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
+    }
+
+    @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Removed enableEdgeToEdge() to keep status bar as a solid block
 
-        // Check location permissions on app start
-        checkAndRequestLocationPermissions()
+        // Check permissions on app start
+        checkAndRequestPermissions()
+
+        // Start the charging detection service
+        startChargingDetectionService()
 
         setContent {
             ThingsAppAndroidTheme {
@@ -175,7 +245,7 @@ class MainActivity : ComponentActivity() {
                             // Check permissions first
 //                            if (!permissionGranted) {
 //                                LocationPermissionScreen(
-//                                    onRequestPermission = { checkAndRequestLocationPermissions() }
+//                                    onRequestPermission = { checkAndRequestPermissions() }
 //                                )
 //                            } else {
                                 androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -310,7 +380,7 @@ class MainActivity : ComponentActivity() {
 
                             // Check location permissions when entering home screen
                             androidx.compose.runtime.LaunchedEffect(Unit) {
-                                checkAndRequestLocationPermissions()
+                                checkAndRequestPermissions()
                             }
 
                             androidx.compose.runtime.LaunchedEffect(Unit) {

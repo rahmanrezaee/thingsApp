@@ -83,7 +83,7 @@ fun ActivityScreen(state: ActivityState) {
                             }
                             Box(modifier = Modifier.offset(y = (-8).dp)) {
                                 GreenConnectorComponent(
-                                    isConnected = state.isWifiConnected,
+                                    isConnected = true, // Always show as connected since we removed WiFi tracking
                                     stationName = state.stationName,
                                     isGreen = state.isGreenStation
                                 )

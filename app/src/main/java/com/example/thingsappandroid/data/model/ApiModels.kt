@@ -129,7 +129,13 @@ data class VerifyDeviceRequestModel(
 data class GetGreenFiInfoRequest(@SerializedName("WiFiAddress") val wifiAddress: String)
 data class GetLatestIntensityRequest(@SerializedName("Latitude") val lat: Double, @SerializedName("Longitude") val lon: Double)
 data class SetDeviceAliasRequest(@SerializedName("DeviceId") val deviceId: String, @SerializedName("Alias") val alias: String)
-data class SetStationRequest(@SerializedName("DeviceId") val deviceId: String, @SerializedName("StationCode") val stationCode: String)
+data class SetStationRequest(
+    @SerializedName("DeviceId") val deviceId: String,
+    @SerializedName("StationCode") val stationCode: String,
+    @SerializedName("Consumption") val consumption: Double? = null, // in kWh
+    @SerializedName("Voltage") val voltage: Double? = null, // in volts
+    @SerializedName("Watt") val watt: Double? = null // in watts
+)
 data class GetStationInfoRequest(@SerializedName("DeviceId") val deviceId: String)
 data class SetOrganizationRequest(@SerializedName("DeviceId") val deviceId: String, @SerializedName("OrganizationCode") val orgCode: String)
 data class GetOrganizationInfoRequest(@SerializedName("DeviceId") val deviceId: String)
