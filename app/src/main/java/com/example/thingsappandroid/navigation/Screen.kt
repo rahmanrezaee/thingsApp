@@ -1,6 +1,7 @@
 package com.example.thingsappandroid.navigation
 
 sealed class Screen(val route: String) {
+    object Permission : Screen("permission")
     object Onboarding : Screen("onboarding")
     object Login : Screen("login")
     object SignUp : Screen("signup")

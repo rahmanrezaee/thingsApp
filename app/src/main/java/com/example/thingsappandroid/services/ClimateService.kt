@@ -32,11 +32,37 @@ class ClimateService {
 
     fun getMappedClimateData(status: String?): ClimateData {
         if (status == null) return greenData
-        
+
         return when {
-            status.contains("GreenOn", ignoreCase = true) -> greenData
-            status.contains("NotGreen", ignoreCase = true) -> notGreenData
+            status.contains("GreenOn", ignoreCase = true) ||
+            status.contains("GreenOnContract", ignoreCase = true) ||
+            status.contains("GreenOnCarbonBudget", ignoreCase = true) ||
+            status.contains("GreenOnBoth", ignoreCase = true) ||
+            status.contains("GreenOnDeviceCarbonBudget", ignoreCase = true) ||
+            status.contains("GreenOnEACs", ignoreCase = true) -> greenData
+            status.contains("NotGreen", ignoreCase = true) ||
+            status.contains("NotSet", ignoreCase = true) -> notGreenData
             else -> greenData
         }
+    }
+
+    fun getMappedClimateData(statusInt: Int?): ClimateData {
+        if (statusInt == null) return greenData
+
+        val status = when (statusInt) {
+            0 -> "NotSet"
+            1 -> "NotGreenOnContract"
+            2 -> "NotGreenOnCarbonBudget"
+            3 -> "NotGreenOnBoth"
+            4 -> "NotGreenOnDeviceCarbonBudget"
+            5 -> "GreenOnContract"
+            6 -> "GreenOnCarbonBudget"
+            7 -> "GreenOnBoth"
+            8 -> "GreenOnDeviceCarbonBudget"
+            9 -> "GreenOnEACs"
+            else -> "NotSet"
+        }
+
+        return getMappedClimateData(status)
     }
 }
