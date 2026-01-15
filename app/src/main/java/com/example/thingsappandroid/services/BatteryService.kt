@@ -163,6 +163,7 @@ class BatteryService : Service() {
                 
                 val deviceId = DeviceUtils.getStoredDeviceId(applicationContext)
                 val stationCode = WifiUtils.getHashedWiFiBSSID(applicationContext)
+                WifiUtils.getWiFiSSID(applicationContext) // Log the WiFi SSID
                 
                 // Get battery information
                 val batteryIntent = applicationContext.registerReceiver(

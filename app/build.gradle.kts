@@ -2,10 +2,12 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.dagger.hilt.android") version "2.57.1"
+    kotlin("kapt")
 }
 android {
     namespace = "com.example.thingsappandroid"
-    compileSdk = 35 // Adjusted to stable version, assuming 36 was a typo or preview in context, using standard recent SDK
+    compileSdk = 36 // Adjusted to stable version, assuming 36 was a typo or preview in context, using standard recent SDK
 
     defaultConfig {
         applicationId = "com.example.thingsappandroid"
@@ -36,6 +38,14 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    kapt {
+        correctErrorTypes = true
+    }
+}
+
+hilt {
+    enableAggregatingTask = false
 }
 
 dependencies {
@@ -55,10 +65,15 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     
     // Networking
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.11.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+    implementation(libs.retrofit)
+    implementation(libs.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.logging.interceptor)
+    
+    // Dagger Hilt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.android.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

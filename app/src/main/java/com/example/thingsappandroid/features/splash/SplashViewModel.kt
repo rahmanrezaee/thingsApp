@@ -10,23 +10,26 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.data.remote.NetworkModule
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import javax.inject.Inject
 
 sealed class SplashEffect {
     object NavigateToHome : SplashEffect()
-    object NavigateToLogin : SplashEffect()
     object NavigateToOnboarding : SplashEffect()
 }
 
-class SplashViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repository = ThingsRepository()
-    private val tokenManager = TokenManager(application)
-    private val preferenceManager = PreferenceManager(application)
+@HiltViewModel
+class SplashViewModel @Inject constructor(
+    application: Application,
+    private val repository: ThingsRepository,
+    private val tokenManager: TokenManager,
+    private val preferenceManager: PreferenceManager
+) : AndroidViewModel(application) {
 
     private val _effect = Channel<SplashEffect>()
     val effect = _effect.receiveAsFlow()
@@ -52,26 +55,36 @@ class SplashViewModel(application: Application) : AndroidViewModel(application) 
                 Settings.Secure.ANDROID_ID
             ) ?: UUID.randomUUID().toString()
 
+            // Always register device and get token (no login required)
             // 1. Check Local Token First
             val cachedToken = tokenManager.getToken()
             if (!cachedToken.isNullOrEmpty()) {
-
-                // log the token for debugging purposes
-                Log.d("SplashViewModel", "Cached Token: $cachedToken")
+                // Token exists, use it
+                Log.d("SplashViewModel", "Using cached token")
                 Log.d("SplashViewModel", "deviceId: $deviceId")
-
                 NetworkModule.setAuthToken(cachedToken)
+                
+                // Still register device to ensure it's synced
+                repository.syncDeviceInfo(deviceId)
+                
                 _effect.send(SplashEffect.NavigateToHome)
                 return@launch
             }
+            
+            // 2. No token - authenticate to get token (device registration happens automatically)
             val token = repository.authenticate(deviceId)
-
             if (token != null) {
                 tokenManager.saveToken(token)
                 NetworkModule.setAuthToken(token)
+                
+                // Register device after getting token
+                repository.syncDeviceInfo(deviceId)
+                
                 _effect.send(SplashEffect.NavigateToHome)
             } else {
-                _effect.send(SplashEffect.NavigateToLogin)
+                // If authentication fails, still try to go to home (device can work offline)
+                Log.w("SplashViewModel", "Authentication failed, proceeding to home anyway")
+                _effect.send(SplashEffect.NavigateToHome)
             }
         }
     }

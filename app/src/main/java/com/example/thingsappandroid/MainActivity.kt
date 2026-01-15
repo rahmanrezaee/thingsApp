@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavType
 import com.example.thingsappandroid.services.BatteryService
 import androidx.navigation.compose.NavHost
@@ -33,9 +34,10 @@ import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.features.auth.screens.LoginScreen
 import com.example.thingsappandroid.features.auth.screens.SignUpScreen
-import com.example.thingsappandroid.data.local.PreferenceManager
-import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.features.MainScreen
+import com.example.thingsappandroid.data.local.PreferenceManager
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
 import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
 import com.example.thingsappandroid.features.auth.screens.VerifyScreen
@@ -49,52 +51,16 @@ import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import kotlinx.coroutines.flow.collectLatest
 
-@Composable
-fun LocationPermissionScreen(onRequestPermission: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "Location Permission Required",
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
 
-        Text(
-            text = "This app needs location access to provide accurate carbon intensity data and environmental information based on your location.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        PrimaryButton(
-            text = "Grant Location Permission",
-            onClick = onRequestPermission,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Location data is used only for environmental calculations and is not shared with third parties.",
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center,
-            color = androidx.compose.ui.graphics.Color.Gray
-        )
-    }
-}
-
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    @Inject
+    lateinit var preferenceManager: PreferenceManager
 
     // Permission state - will be accessed from composables
     private var _locationPermissionGranted = false
-    val locationPermissionGranted: Boolean
-        get() = _locationPermissionGranted
+
 
     // Permission request launcher for location and notifications
     private val permissionLauncher = registerForActivityResult(
@@ -116,7 +82,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Location permission is required to use this app.", Toast.LENGTH_LONG).show()
         }
 
-        if (!notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (!notificationGranted) {
             Toast.makeText(this, "Notification permission recommended for background service.", Toast.LENGTH_SHORT).show()
         }
     }
@@ -144,7 +110,7 @@ class MainActivity : ComponentActivity() {
 
         if (!fineLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
         if (!coarseLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (!notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (!notificationGranted) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
@@ -185,6 +151,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun isServiceRunning(serviceClass: Class<*>): Boolean {
         val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
         for (service in manager.getRunningServices(Int.MAX_VALUE)) {
@@ -214,6 +181,7 @@ class MainActivity : ComponentActivity() {
                 SideEffect {
                     val window = (context as? ComponentActivity)?.window
                     if (window != null) {
+                        @Suppress("DEPRECATION")
                         window.statusBarColor = android.graphics.Color.WHITE
                         WindowCompat.getInsetsController(window, window.decorView).apply {
                             isAppearanceLightStatusBars = true
@@ -221,18 +189,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Permission state that can be observed by composables
-                var permissionGranted by remember { mutableStateOf(locationPermissionGranted) }
 
-                // Update permission state when it changes
-                androidx.compose.runtime.LaunchedEffect(locationPermissionGranted) {
-                    permissionGranted = locationPermissionGranted
-                }
                 val navController = rememberNavController()
-
-                // Dependencies
-                val tokenManager = remember { TokenManager(context) }
-                val preferenceManager = remember { PreferenceManager(context) }
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     NavHost(
@@ -240,24 +198,14 @@ class MainActivity : ComponentActivity() {
                         startDestination = "splash_route"
                     ) {
                         composable("splash_route") {
-                            val splashViewModel: SplashViewModel = viewModel()
+                            val splashViewModel: SplashViewModel = hiltViewModel()
 
-                            // Check permissions first
-//                            if (!permissionGranted) {
-//                                LocationPermissionScreen(
-//                                    onRequestPermission = { checkAndRequestPermissions() }
-//                                )
-//                            } else {
+
                                 androidx.compose.runtime.LaunchedEffect(Unit) {
                                     splashViewModel.effect.collectLatest { effect ->
                                         when (effect) {
                                             is SplashEffect.NavigateToHome -> {
                                                 navController.navigate(Screen.Home.route) {
-                                                    popUpTo("splash_route") { inclusive = true }
-                                                }
-                                            }
-                                            is SplashEffect.NavigateToLogin -> {
-                                                navController.navigate(Screen.Login.route) {
                                                     popUpTo("splash_route") { inclusive = true }
                                                 }
                                             }
@@ -270,7 +218,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                                 SplashScreen()
-//                            }
+
                         }
 
                         composable(Screen.Onboarding.route) {
@@ -393,7 +341,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            MainScreen()
+                            MainScreen(navController = navController)
                         }
                     }
 

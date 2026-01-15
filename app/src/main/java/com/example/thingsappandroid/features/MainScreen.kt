@@ -15,19 +15,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.thingsappandroid.features.activity.components.HomeBottomBar
 import com.example.thingsappandroid.features.activity.screens.ActivityScreen
 import com.example.thingsappandroid.features.home.screens.HomeScreen
 import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
 import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
-import com.example.thingsappandroid.features.profile.screens.ProfileScreen
-import com.example.thingsappandroid.features.shop.screens.ShopScreen
+import com.example.thingsappandroid.navigation.Screen
 
 @Composable
 fun MainScreen(
+    navController: NavController,
     homeViewModel: ActivityViewModel = viewModel()
 ) {
-    var currentTab by remember { mutableIntStateOf(1) } // Default to Activity (1)
+    var currentTab by remember { mutableIntStateOf(0) } // Default to Activity (1)
     val state by homeViewModel.state.collectAsState()
     val context = LocalContext.current
 
@@ -51,17 +52,26 @@ fun MainScreen(
         bottomBar = {
             HomeBottomBar(
                 selectedTab = currentTab,
-                onTabSelected = { newIndex -> currentTab = newIndex }
+                onTabSelected = { newIndex -> 
+                    if (newIndex == 2 || newIndex == 3) {
+                        // Redirect shop (2) and profile (3) tabs to LoginScreen
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    } else {
+                        currentTab = newIndex
+                    }
+                }
             )
         },
         containerColor = Color.White
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when (currentTab) {
-                0 -> HomeScreen(state.deviceName)
-                1 -> ActivityScreen(state)
-                2 -> ShopScreen(state.deviceName)
-                3 -> ProfileScreen(state.deviceName)
+                0 -> HomeScreen(state) // Activity content is now in Home
+                1 -> {} // Keep for now, can be removed later
+                2 -> {} // Shop tab redirects to LoginScreen
+                3 -> {} // Profile tab redirects to LoginScreen
             }
         }
     }
