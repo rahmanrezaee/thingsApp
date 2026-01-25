@@ -129,7 +129,8 @@ fun HomeScreen(
                                 totalBudget
                             }
                             
-                            Box(modifier = Modifier.clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
+                            Box(modifier = Modifier
+                                .zIndex(1f).clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
                                 CarbonCard(
                                     currentUsage = remainingInGrams.toFloat(), // Remaining emissions budget in grams
                                     totalCapacity = totalInGrams.toFloat() // Total emissions budget in grams
