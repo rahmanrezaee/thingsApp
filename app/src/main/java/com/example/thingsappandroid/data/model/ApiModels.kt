@@ -68,8 +68,8 @@ data class AndroidMeasurementModel(
     val interval: Int? = null,
     val totalSamples: Int? = null,
     val sourceType: String? = null,
-    val batteryCapacity: Double? = null,
-    val emissionFactor: Double? = null,
+    val batteryCapacity: Int? = null,
+    @SerializedName("EmissionFactor") val emissionFactor: Int? = null,
     val cfeScore: Double? = null,
     val userId: String? = null,
     val appId: String? = null,
@@ -157,12 +157,19 @@ data class TokenResponse(
     @SerializedName("Data") val token: String
 )
 
+// Wrapper for API response that has nested Data structure
+data class DeviceInfoApiResponse(
+    @SerializedName("Data") val data: DeviceInfoResponse?,
+    @SerializedName("StatusCode") val statusCode: Int?,
+    @SerializedName("Message") val message: String?
+)
+
 data class DeviceInfoResponse(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("Alias") val alias: String?,
     @SerializedName("CommencementDate") val commencementDate: String?,
     @SerializedName("ThingId") val thingId: String?,
-    @SerializedName("ClimateStatus") val climateStatus: String?, // Enum as String or Int? Spec says enum. Usually int or string.
+    @SerializedName("ClimateStatus") val climateStatus: Int?, // Changed to Int based on API response
     @SerializedName("TotalAvoidedKgCO2e") val totalAvoided: Double?,
     @SerializedName("TotalEmissionsKgCO2e") val totalEmissions: Double?,
     @SerializedName("TotalElectricityConsumedKWh") val totalConsumed: Double?,

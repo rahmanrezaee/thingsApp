@@ -13,4 +13,11 @@ sealed class Screen(val route: String) {
     }
     
     object Home : Screen("home")
+
+    object Authorize : Screen("authorize?requestedby={requestedby}&requestedUrl={requestedUrl}&sessionId={sessionId}") {
+        fun createRoute(requestedBy: String, requestedUrl: String, sessionId: String) =
+            "authorize?requestedby=$requestedBy&requestedUrl=$requestedUrl&sessionId=$sessionId"
+    }
+    
+    object StationCode : Screen("station_code")
 }

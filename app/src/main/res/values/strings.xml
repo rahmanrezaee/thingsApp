@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ThingsAppAndroid</string>
+    <string name="app_name">ThingsApp</string>
 
     <!-- Auth Common -->
     <string name="email_label">Email</string>

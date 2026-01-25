@@ -27,10 +27,77 @@ import com.example.thingsappandroid.features.activity.components.HomeTopBar
 import com.example.thingsappandroid.features.activity.components.LinkedCardConnector
 import com.example.thingsappandroid.features.activity.components.LowCarbonComponent
 import com.example.thingsappandroid.features.activity.components.MetricsList
+import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
 import com.example.thingsappandroid.features.activity.viewModel.ActivityState
+import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
+import com.example.thingsappandroid.ui.components.AvoidedCO2EmissionsBottomSheet
+import com.example.thingsappandroid.ui.components.CurrentCarbonIntensityBottomSheet
+import com.example.thingsappandroid.ui.components.DeviceCarbonBatteryBottomSheet
+import com.example.thingsappandroid.ui.components.DeviceClimateStatusBottomSheet
+import com.example.thingsappandroid.ui.components.ElectricityBatteryBottomSheet
+import com.example.thingsappandroid.ui.components.ElectricityConsumptionBottomSheet
+import com.example.thingsappandroid.ui.components.GridCarbonIntensityBottomSheet
+import com.example.thingsappandroid.ui.components.StationBottomSheet
+import com.example.thingsappandroid.ui.components.StationCodeBottomSheet
+import com.example.thingsappandroid.util.TimeUtility
+import kotlinx.coroutines.flow.Flow
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import android.app.Activity
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
-fun ActivityScreen(state: ActivityState) {
+fun ActivityScreen(
+    state: ActivityState,
+    effectFlow: Flow<ActivityEffect>? = null,
+    onIntent: (ActivityIntent) -> Unit = {}
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val intent = (context as? Activity)?.intent
+                if (intent?.getBooleanExtra("open_station_code_dialog", false) == true) {
+                    onIntent(ActivityIntent.OpenStationCodeDialog)
+                    intent.removeExtra("open_station_code_dialog")
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(effectFlow) {
+        effectFlow?.collect { effect ->
+            when (effect) {
+                is ActivityEffect.ShowToast -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+                is ActivityEffect.StationUpdateSuccess -> {
+                    Toast.makeText(context, "Station updated successfully", Toast.LENGTH_SHORT).show()
+                }
+                is ActivityEffect.StationUpdateError -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
+                }
+                else -> {} // Handle other effects if needed
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -58,18 +125,28 @@ fun ActivityScreen(state: ActivityState) {
 
                 LinkedCardConnector(
                     topContent = {
-                        state.climateData?.let { climate ->
-                            ClimateStatusCard(data = climate)
+                        Box(
+                            modifier = Modifier.clickable { onIntent(ActivityIntent.OpenClimateStatusSheet) }
+                        ) {
+                            state.climateData?.let { climate ->
+                                ClimateStatusCard(data = climate)
+                            }
                         }
-
                     },
                     bottomContentLeft = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            BatteryCard(
-                                modifier = Modifier.zIndex(1f), // Keep battery above animation
-                                batteryLevel = state.batteryLevel,
-                                isCharging = state.isCharging
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .zIndex(1f)
+                                    .clickable { onIntent(ActivityIntent.OpenBatterySheet) }
+                            ) {
+                                BatteryCard(
+                                    modifier = Modifier.zIndex(1f), // Keep battery above animation
+                                    batteryLevel = state.batteryLevel,
+                                    isCharging = state.isCharging,
+                                    batteryCapacityMwh = state.batteryCapacityMwh
+                                )
+                            }
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-12).dp) // Adjust offset for the new icon size
@@ -82,20 +159,23 @@ fun ActivityScreen(state: ActivityState) {
                                 )
                             }
                             Box(modifier = Modifier.offset(y = (-8).dp)) {
-                                GreenConnectorComponent(
-                                    isConnected = true, // Always show as connected since we removed WiFi tracking
-                                    stationName = state.stationName,
-                                    isGreen = state.isGreenStation
-                                )
+                                Box(modifier = Modifier.clickable { onIntent(ActivityIntent.OpenStationSheet) }) {
+                                    GreenConnectorComponent(
+                                        stationInfo = state.stationInfo,
+                                        onEnterCodeClick = { onIntent(ActivityIntent.OpenStationCodeDialog) }
+                                    )
+                                }
                             }
                         }
                     },
                     bottomContentRight = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CarbonCard(
-                                currentUsage = state.currentUsageKwh * 100, // Convert kWh to some unit the card expects
-                                totalCapacity = 500f // Default capacity
-                            )
+                            Box(modifier = Modifier.clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
+                                CarbonCard(
+                                    currentUsage = state.currentUsageKwh * 100, // Convert kWh to some unit the card expects
+                                    totalCapacity = 500f // Default capacity
+                                )
+                            }
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-12).dp)
@@ -104,7 +184,11 @@ fun ActivityScreen(state: ActivityState) {
                             ) {
                                 CarbonConnectionLine(height = 54.dp, isCharging = state.isCharging)
                             }
-                            Box(modifier = Modifier.offset(y = (-8).dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(y = (-8).dp)
+                                    .clickable { onIntent(ActivityIntent.OpenGridIntensitySheet) }
+                            ) {
                                 LowCarbonComponent(intensity = state.carbonIntensity)
                             }
                         }
@@ -116,14 +200,88 @@ fun ActivityScreen(state: ActivityState) {
 
 
                 // 3. Metrics List
+                val sinceDate = TimeUtility.formatCommencementDate(deviceInfo.commencementDate)
                 MetricsList(
                     consumptionKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
                     avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
-                    carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: 0
+                    carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: 0,
+                    onElectricityConsumptionClick = { onIntent(ActivityIntent.OpenElectricityConsumptionSheet) },
+                    onAvoidedEmissionsClick = { onIntent(ActivityIntent.OpenAvoidedEmissionsSheet) },
+                    onCarbonIntensityClick = { onIntent(ActivityIntent.OpenCarbonIntensityMetricSheet) }
                 )
                 Spacer(modifier = Modifier.height(24.dp))
             }
-
         }
+    }
+
+    if (state.showStationCodeDialog) {
+        StationCodeBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissStationCodeDialog) },
+            onVerify = { code -> onIntent(ActivityIntent.SubmitStationCode(code)) },
+            initialValue = state.stationCode ?: "",
+            isLoading = state.isUpdatingStation,
+            errorMessage = state.stationCodeError
+        )
+    }
+
+    if (state.showClimateStatusSheet) {
+        DeviceClimateStatusBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissClimateStatusSheet) },
+            climateStatusInt = state.deviceInfo?.climateStatus
+        )
+    }
+
+    if (state.showBatterySheet) {
+        ElectricityBatteryBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissBatterySheet) },
+            batteryLevel = state.batteryLevel,
+            isCharging = state.isCharging,
+            batteryCapacityMwh = state.batteryCapacityMwh
+        )
+    }
+
+    if (state.showCarbonBatterySheet) {
+        DeviceCarbonBatteryBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissCarbonBatterySheet) },
+            remainingBudgetKg = state.deviceInfo?.remainingBudget,
+            totalBudgetKg = state.deviceInfo?.totalBudget
+        )
+    }
+
+    if (state.showStationSheet) {
+        StationBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissStationSheet) },
+            onManageStations = { onIntent(ActivityIntent.OpenStationCodeDialog) }
+        )
+    }
+
+    if (state.showGridIntensitySheet) {
+        GridCarbonIntensityBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissGridIntensitySheet) },
+            carbonIntensity = state.carbonIntensity
+        )
+    }
+
+    val sinceDate = state.deviceInfo?.let { TimeUtility.formatCommencementDate(it.commencementDate) }
+    if (state.showElectricityConsumptionSheet) {
+        ElectricityConsumptionBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissElectricityConsumptionSheet) },
+            consumptionKwh = state.deviceInfo?.totalConsumed?.toFloat() ?: 0f,
+            sinceDate = sinceDate
+        )
+    }
+    if (state.showAvoidedEmissionsSheet) {
+        AvoidedCO2EmissionsBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissAvoidedEmissionsSheet) },
+            avoidedEmissions = state.deviceInfo?.totalAvoided?.toFloat() ?: 0f,
+            sinceDate = sinceDate
+        )
+    }
+    if (state.showCarbonIntensityMetricSheet) {
+        CurrentCarbonIntensityBottomSheet(
+            onDismiss = { onIntent(ActivityIntent.DismissCarbonIntensityMetricSheet) },
+            carbonIntensity = state.deviceInfo?.carbonInfo?.currentIntensity?.toInt() ?: state.carbonIntensity,
+            sinceDate = sinceDate
+        )
     }
 }

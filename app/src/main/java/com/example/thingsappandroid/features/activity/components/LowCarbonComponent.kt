@@ -47,7 +47,7 @@ fun LowCarbonComponent(intensity: Int = 96) {
                 withStyle(style = SpanStyle(color = ActivityGreen, fontWeight = FontWeight.Bold)) {
                     append("Low")
                 }
-                append(" ($intensity gCO2e/\nkWh)")
+                append(" ($intensity gCO₂e/\nkWh)")
             },
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 13.sp,

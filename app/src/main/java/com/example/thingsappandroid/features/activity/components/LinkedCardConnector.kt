@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 
 // =================================================================================================
 // SECTION: CONFIGURATION (COLORS)
@@ -43,13 +45,17 @@ fun LinkedCardConnector(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 1. Top Widget
-        topContent()
+        Box(modifier = Modifier.zIndex(1f)) {
+            topContent()
+        }
 
         // 2. The Connector Graphic (Canvas)
         ConnectorGraphic(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(46.dp) // Fixed height to match geometry
+                .offset(y = (-4).dp) // Tuck the top cap under the top content
+                .zIndex(0f)
         )
 
         // 3. Bottom Widgets (Split Row)
@@ -106,6 +112,10 @@ private fun ConnectorGraphic(
             val yHorizontal = 22.dp.toPx()
             val yLegStart = 30.dp.toPx()
             val yBottom = size.height
+            
+            // Offset for energy flow to stop under topContent (not at the very top)
+            // Use ySplit as the minimum stop point to ensure flow ends well below topContent
+            val flowStopOffset = ySplit + capHeight + 2.dp.toPx() // Stop flow well below top
 
             // Layout Landmarks (X-Axis)
             val gapPx = 15.dp.toPx()
@@ -240,11 +250,15 @@ private fun ConnectorGraphic(
                 val segmentLength = 20f
 
                 fun drawFlow(measure: PathMeasure, length: Float, flowColor: Color = ColorFlow) {
-                    val distance = (1f - progress) * (length + segmentLength) // Reversed flow: bottom to top
+                    // Calculate the maximum distance the flow can reach (stop well before top)
+                    // Ensure flow stops below topContent by using the full flowStopOffset
+                    val effectiveLength = (length - flowStopOffset).coerceAtLeast(0f)
+                    
+                    val distance = (1f - progress) * (effectiveLength + segmentLength) // Reversed flow: bottom to top
                     val start = (distance - segmentLength).coerceAtLeast(0f)
-                    val end = distance.coerceAtMost(length)
+                    val end = distance.coerceAtMost(effectiveLength)
 
-                    if (start < length) {
+                    if (start < effectiveLength && end > 0f) {
                         val segmentPath = Path()
                         measure.getSegment(start, end, segmentPath, true)
 
@@ -268,33 +282,11 @@ private fun ConnectorGraphic(
                 drawFlow(rightMeasure, rightLength, ColorCarbonFlow) // Dark carbon energy flow for carbon card
 
                 // 4. Draw The Pulse (Cap Fill Effect) - Reversed flow: bottom to top
-                val capInfluenceLength = 8f
-
-                // Calculate cap alpha for left branch (green flow)
-                val leftHeadPos = (1f - progress) * (leftLength + segmentLength)
-                val leftTailPos = leftHeadPos - segmentLength
-                val leftFillFactor = (leftHeadPos / capInfluenceLength).coerceIn(0f, 1f)
-                val leftDrainFactor = (leftTailPos / capInfluenceLength).coerceIn(0f, 1f)
-                val leftCapAlpha = (leftFillFactor - leftDrainFactor).coerceIn(0f, 1f)
-
-                // Calculate cap alpha for right branch (carbon flow)
-                val rightHeadPos = (1f - progress) * (rightLength + segmentLength)
-                val rightTailPos = rightHeadPos - segmentLength
-                val rightFillFactor = (rightHeadPos / capInfluenceLength).coerceIn(0f, 1f)
-                val rightDrainFactor = (rightTailPos / capInfluenceLength).coerceIn(0f, 1f)
-                val rightCapAlpha = (rightFillFactor - rightDrainFactor).coerceIn(0f, 1f)
-
-                // Combine cap effects - use the maximum alpha and choose dominant color
-                val combinedCapAlpha = maxOf(leftCapAlpha, rightCapAlpha)
-
-                if (combinedCapAlpha > 0f) {
-                    val capColor = if (leftCapAlpha >= rightCapAlpha) {
-                        ColorFlow.copy(alpha = combinedCapAlpha)
-                    } else {
-                        ColorCarbonFlow.copy(alpha = combinedCapAlpha)
-                    }
-                    drawPath(topCap, capColor)
-                }
+                // Flow stops before reaching top, so cap animation should also stop earlier
+                // Since flow stops at flowStopOffset from top, cap should never animate
+                // (cap is at the very top, flow never reaches it)
+                // Therefore, we disable the top cap animation entirely
+                // The static gray cap will remain visible, but no animated fill
             }
         }
     )
@@ -319,7 +311,7 @@ fun LinkedCardConnectorPreview() {
                     height = 40.dp
                 )
                 // New Extension Component
-                GreenConnectorComponent(isConnected = true)
+                GreenConnectorComponent()
             }
         },
         bottomContentRight = {

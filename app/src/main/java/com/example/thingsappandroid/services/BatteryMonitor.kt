@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +25,7 @@ class BatteryMonitor(private val context: Context) {
     private val _isCharging = MutableStateFlow(false)
     val isCharging: StateFlow<Boolean> = _isCharging.asStateFlow()
 
-    private val _consumption = MutableStateFlow(0f) // in kWh
+    private val _consumption = MutableStateFlow(0f) // in kWh (accumulated)
     val consumption: StateFlow<Float> = _consumption.asStateFlow()
 
     private val _voltage = MutableStateFlow(0f) // in volts
@@ -31,6 +33,10 @@ class BatteryMonitor(private val context: Context) {
 
     private val _watt = MutableStateFlow(0f) // in watts
     val watt: StateFlow<Float> = _watt.asStateFlow()
+    
+    // Track time for consumption accumulation
+    private var lastUpdateTime: Long = System.currentTimeMillis()
+    private var accumulatedConsumption: Float = 0f // in kWh
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -90,17 +96,41 @@ class BatteryMonitor(private val context: Context) {
             val watts = voltage * estimatedCurrent
             _watt.value = watts
             
-            // Convert to kWh (assuming 1 hour interval for simplicity)
-            // In real implementation, you'd track time intervals
-            val kwh = watts / 1000f // per hour
-            _consumption.value = kwh
+            // Calculate consumption over actual time interval
+            val currentTime = System.currentTimeMillis()
+            val timeDeltaHours = (currentTime - lastUpdateTime) / (1000f * 60f * 60f) // Convert ms to hours
+            lastUpdateTime = currentTime
+            
+            // Accumulate consumption: kWh = (Watts * hours) / 1000
+            if (timeDeltaHours > 0 && timeDeltaHours < 24) { // Sanity check: less than 24 hours
+                val incrementalKwh = (watts * timeDeltaHours) / 1000f
+                accumulatedConsumption += incrementalKwh
+                _consumption.value = accumulatedConsumption
+            }
         }
+    }
+    
+    fun resetConsumption() {
+        accumulatedConsumption = 0f
+        _consumption.value = 0f
+        lastUpdateTime = System.currentTimeMillis()
     }
 
     fun startMonitoring() {
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         try {
-            context.registerReceiver(batteryReceiver, filter)
+            // Use ContextCompat for Android 13+ compatibility (RECEIVER_NOT_EXPORTED required)
+            // System broadcasts don't need to be exported
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.registerReceiver(
+                    context,
+                    batteryReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+            } else {
+                context.registerReceiver(batteryReceiver, filter)
+            }
             Log.d(TAG, "Battery monitoring started")
             
             // Get initial battery state

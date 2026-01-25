@@ -114,25 +114,34 @@ private fun GlobalMessage(
         MessageType.INFO -> Icons.Default.Info
     }
 
-    AnimatedVisibility(
-        visible = true,
-        enter = slideInVertically(
-            initialOffsetY = { it },
-            animationSpec = tween(durationMillis = 300)
-        ),
-        exit = slideOutVertically(
-            targetOffsetY = { it },
-            animationSpec = tween(durationMillis = 300)
-        )
+    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.BottomCenter
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = tween(durationMillis = 300)
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(durationMillis = 300)
+            )
         ) {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = navigationBarPadding + 8.dp,
+
+                    ),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = colors.background

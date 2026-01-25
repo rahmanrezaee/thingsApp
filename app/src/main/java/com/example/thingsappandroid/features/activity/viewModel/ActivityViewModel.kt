@@ -9,15 +9,24 @@ import android.location.LocationManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Intent
+import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
+import com.example.thingsappandroid.data.model.DeviceInfoApiResponse
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
+import com.example.thingsappandroid.data.model.DeviceInfoResponse
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.services.BatteryMonitor
+import com.example.thingsappandroid.util.BatteryUtil
 import com.example.thingsappandroid.util.ClimateUtils
+import com.example.thingsappandroid.util.WifiUtils
+import io.sentry.Sentry
+import io.sentry.Breadcrumb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -26,12 +35,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+// Helper data class for multiple return values
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
 class ActivityViewModel(application: Application) : AndroidViewModel(application) {
 
     // Dependencies
     private val repository = ThingsRepository()
     private val tokenManager = TokenManager(application)
     private val batteryMonitor = BatteryMonitor(application)
+    private val preferenceManager = PreferenceManager(application)
+    
+    // Track previous charging state to detect plug-in events
+    private var wasCharging = false
 
     // MVI State
     private val _state = MutableStateFlow(ActivityState())
@@ -53,6 +69,62 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             ActivityIntent.Initialize -> initialize()
             ActivityIntent.RefreshData -> refreshServerData()
             ActivityIntent.Logout -> performLogout()
+            is ActivityIntent.SubmitStationCode -> submitStationCode(intent.stationCode)
+            ActivityIntent.OpenStationCodeDialog -> {
+                _state.update { it.copy(showStationCodeDialog = true) }
+            }
+            ActivityIntent.CloseStationCodeDialog,
+            ActivityIntent.DismissStationCodeDialog -> {
+                _state.update { it.copy(showStationCodeDialog = false, stationCodeError = null) }
+            }
+            ActivityIntent.OpenClimateStatusSheet -> {
+                _state.update { it.copy(showClimateStatusSheet = true) }
+            }
+            ActivityIntent.DismissClimateStatusSheet -> {
+                _state.update { it.copy(showClimateStatusSheet = false) }
+            }
+            ActivityIntent.OpenBatterySheet -> {
+                _state.update { it.copy(showBatterySheet = true) }
+            }
+            ActivityIntent.DismissBatterySheet -> {
+                _state.update { it.copy(showBatterySheet = false) }
+            }
+            ActivityIntent.OpenCarbonBatterySheet -> {
+                _state.update { it.copy(showCarbonBatterySheet = true) }
+            }
+            ActivityIntent.DismissCarbonBatterySheet -> {
+                _state.update { it.copy(showCarbonBatterySheet = false) }
+            }
+            ActivityIntent.OpenStationSheet -> {
+                _state.update { it.copy(showStationSheet = true) }
+            }
+            ActivityIntent.DismissStationSheet -> {
+                _state.update { it.copy(showStationSheet = false) }
+            }
+            ActivityIntent.OpenGridIntensitySheet -> {
+                _state.update { it.copy(showGridIntensitySheet = true) }
+            }
+            ActivityIntent.DismissGridIntensitySheet -> {
+                _state.update { it.copy(showGridIntensitySheet = false) }
+            }
+            ActivityIntent.OpenElectricityConsumptionSheet -> {
+                _state.update { it.copy(showElectricityConsumptionSheet = true) }
+            }
+            ActivityIntent.DismissElectricityConsumptionSheet -> {
+                _state.update { it.copy(showElectricityConsumptionSheet = false) }
+            }
+            ActivityIntent.OpenAvoidedEmissionsSheet -> {
+                _state.update { it.copy(showAvoidedEmissionsSheet = true) }
+            }
+            ActivityIntent.DismissAvoidedEmissionsSheet -> {
+                _state.update { it.copy(showAvoidedEmissionsSheet = false) }
+            }
+            ActivityIntent.OpenCarbonIntensityMetricSheet -> {
+                _state.update { it.copy(showCarbonIntensityMetricSheet = true) }
+            }
+            ActivityIntent.DismissCarbonIntensityMetricSheet -> {
+                _state.update { it.copy(showCarbonIntensityMetricSheet = false) }
+            }
         }
     }
 
@@ -145,35 +217,52 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     private suspend fun loadDeviceInfo() {
         _state.update { it.copy(isLoading = true) }
         val deviceId = getDeviceId()
-        val (latitude, longitude) = getCurrentLocation()
+        
+        // Run location and API calls on IO thread to avoid blocking main thread
+        val (latitude, longitude, wifiAddress, stationCode) = withContext(Dispatchers.IO) {
+            val loc = getCurrentLocation()
+            val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
+            val station = _state.value.stationCode
+            Quadruple(loc.first, loc.second, wifi, station)
+        }
 
         try {
             Log.d("ActivityViewModel", "Loading device info with coordinates: $latitude, $longitude")
-            val response = NetworkModule.api.getDeviceInfo(
-                DeviceInfoRequest(
-                    deviceId = deviceId,
-                    latitude = latitude,
-                    longitude = longitude,
-                    currentVersion = "1.0.0" // Could get from BuildConfig.VERSION_NAME
+            Log.d("ActivityViewModel", "WiFi Address: $wifiAddress")
+            Log.d("ActivityViewModel", "Station Code: $stationCode")
+            
+            val response = withContext(Dispatchers.IO) {
+                NetworkModule.api.getDeviceInfo(
+                    DeviceInfoRequest(
+                        deviceId = deviceId,
+                        stationCode = stationCode,
+                        wifiAddress = wifiAddress,
+                        latitude = latitude,
+                        longitude = longitude,
+                        currentVersion = "1.0.0" // Could get from BuildConfig.VERSION_NAME
+                    )
                 )
-            )
+            }
 
             if (response.isSuccessful && response.body() != null) {
-                val deviceInfo = response.body()!!
+                // API returns nested structure: {"Data":{...},"StatusCode":200,"Message":"success"}
+                val apiResponse = response.body()!!
+                val deviceInfo = apiResponse.data
+                if (deviceInfo == null) {
+                    Log.w("ActivityViewModel", "API response has no data field")
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "API response has no data field"
+                        )
+                    }
+                    return
+                }
                 Log.d("ActivityViewModel", "deviceInfo: ${deviceInfo},")
 
-                val mappedClimate = deviceInfo.stationInfo?.climateStatus?.let { climateStatusStr ->
-                    // Try to parse as Int first, then fallback to String
-                    try {
-                        val statusInt = climateStatusStr.toIntOrNull()
-                        if (statusInt != null) {
-                            ClimateUtils.getMappedClimateData(statusInt)
-                        } else {
-                            ClimateUtils.getMappedClimateData(climateStatusStr)
-                        }
-                    } catch (e: Exception) {
-                        ClimateUtils.getMappedClimateData(climateStatusStr)
-                    }
+                // ClimateStatus is now Int in the response
+                val mappedClimate = deviceInfo.climateStatus?.let { statusInt ->
+                    ClimateUtils.getMappedClimateData(statusInt)
                 } ?: ClimateUtils.getMappedClimateData(null as String?)
 
                 _state.update {
@@ -183,14 +272,15 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                         avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
                         totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
                         carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                        stationInfo = deviceInfo.stationInfo, // Set the full StationInfo object
                         stationName = deviceInfo.stationInfo?.stationName,
                         isGreenStation = deviceInfo.stationInfo?.isGreen == true,
-                        climateData = mappedClimate
+                        climateData = mappedClimate,
+                        error = null // Clear any previous errors
                     )
                 }
             } else {
-
-                Log.d("ActivityViewModel", "Error: ${response.code()},")
+                Log.d("ActivityViewModel", "Error: ${response.code()}")
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -199,7 +289,15 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         } catch (e: Exception) {
-            Log.d("ActivityViewModel", "Error: ${e.message},")
+            Log.d("ActivityViewModel", "Error: ${e.message}")
+            viewModelScope.launch {
+                val deviceIdForSentry = try { getDeviceId() } catch (ex: Exception) { "unknown" }
+                Sentry.withScope { scope ->
+                    scope.setTag("operation", "loadDeviceInfo")
+                    scope.setContexts("device", mapOf("device_id" to deviceIdForSentry))
+                    Sentry.captureException(e)
+                }
+            }
             _state.update {
                 it.copy(
                     isLoading = false,
@@ -214,6 +312,24 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
 
         // Set Device Name
         _state.update { it.copy(deviceName = Build.MODEL) }
+        
+        // Get battery capacity in mWh - moved to background thread to avoid blocking main thread
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val batteryCapacityMwh = BatteryUtil.getBatteryCapacityMwh(getApplication())
+                withContext(Dispatchers.Main) {
+                    _state.update { it.copy(batteryCapacityMwh = batteryCapacityMwh) }
+                }
+            } catch (e: Exception) {
+                Log.w("ActivityViewModel", "Failed to get battery capacity: ${e.message}")
+                Sentry.withScope { scope ->
+                    scope.setTag("operation", "getBatteryCapacity")
+                    scope.level = io.sentry.SentryLevel.WARNING
+                    Sentry.captureException(e)
+                }
+                // Don't show Toast on background thread - it's not critical
+            }
+        }
 
         // Load device info first
         viewModelScope.launch {
@@ -232,6 +348,19 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                 val battery = args[0] as Float
                 val charging = args[1] as Boolean
                 val consumption = args[2] as Float
+
+                // BatteryService handles station code notification, no need to show here
+                // Just track charging state for other purposes
+                if (charging) {
+                    // Charging started
+                } else {
+                    // Charging stopped
+                    if (_state.value.showStationCodeDialog) {
+                        _state.update { it.copy(showStationCodeDialog = false, stationCodeError = null) }
+                    }
+                }
+                
+                wasCharging = charging
 
                 _state.update {
                     it.copy(
@@ -262,12 +391,20 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             if (currentState.deviceInfo != null && currentState.currentUsageKwh > 0) {
                 // Check API level for uploadConsumption as it requires API 26
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // Get current location for consumption upload
+                    val (latitude, longitude) = getCurrentLocation()
+                    
                     repository.uploadConsumption(
+                        context = getApplication(),
                         deviceId = id,
                         watts = currentState.currentUsageKwh * 1000 / 1.0,
                         kwh = currentState.currentUsageKwh.toDouble(),
                         batteryLevel = (currentState.batteryLevel * 100).toInt(),
-                        isCharging = currentState.isCharging
+                        isCharging = currentState.isCharging,
+                        deviceInfo = currentState.deviceInfo,
+                        latitude = latitude,
+                        longitude = longitude,
+                        stationCode = currentState.stationCode
                     )
                 }
             }
@@ -281,5 +418,51 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         batteryMonitor.stopMonitoring()
+    }
+    
+    private fun submitStationCode(stationCode: String) {
+        viewModelScope.launch {
+            val stationBreadcrumb = Breadcrumb("User submitting station code")
+            stationBreadcrumb.category = "user"
+            stationBreadcrumb.level = io.sentry.SentryLevel.INFO
+            stationBreadcrumb.setData("station_code", stationCode)
+            Sentry.addBreadcrumb(stationBreadcrumb)
+            _state.update {
+                it.copy(
+                    isUpdatingStation = true,
+                    stationCode = stationCode,
+                    stationCodeError = null
+                )
+            }
+            try {
+                val deviceId = getDeviceId()
+                val result = repository.setStation(deviceId, stationCode)
+
+                if (result.first) {
+                    _effect.send(ActivityEffect.StationUpdateSuccess)
+                    _state.update { it.copy(showStationCodeDialog = false) }
+                    // Refresh device info to get updated station info
+                    loadDeviceInfo()
+                } else {
+                    // Keep dialog open and show error
+                    val errorMsg = result.second ?: "Failed to update station code"
+                    _state.update { it.copy(stationCodeError = errorMsg) }
+                }
+            } catch (e: Exception) {
+                Log.e("ActivityViewModel", "Error submitting station code: ${e.message}")
+                val deviceId = try { getDeviceId() } catch (ex: Exception) { "unknown" }
+                Sentry.withScope { scope ->
+                    scope.setTag("operation", "submitStationCode")
+                    scope.setContexts("station", mapOf(
+                        "device_id" to deviceId,
+                        "station_code" to stationCode
+                    ))
+                    Sentry.captureException(e)
+                }
+                _state.update { it.copy(stationCodeError = "Error: ${e.message}") }
+            } finally {
+                _state.update { it.copy(isUpdatingStation = false) }
+            }
+        }
     }
 }

@@ -9,6 +9,20 @@ data class ClimateData(
     val gradientColors: List<Color>
 )
 
+/** Tier for Device Climate Status bottom sheet: Green, 1.5°C Aligned, or Not Green. */
+enum class ClimateTier {
+    Green,
+    Aligned15C,
+    NotGreen
+}
+
+/** Detailed row for bottom sheet: label + description. */
+data class ClimateTierRow(
+    val tier: ClimateTier,
+    val label: String,
+    val description: String
+)
+
 object ClimateUtils {
     private val greenData = ClimateData(
         title = "Green",
@@ -57,4 +71,33 @@ object ClimateUtils {
 
         return getMappedClimateData(status)
     }
+
+    /** Maps API climate status Int to tier for bottom sheet (Green / 1.5°C Aligned / Not Green). */
+    fun getClimateTier(statusInt: Int?): ClimateTier {
+        if (statusInt == null) return ClimateTier.Green
+        return when (statusInt) {
+            5, 6, 7, 8, 9 -> ClimateTier.Green           // GreenOn*
+            1, 2 -> ClimateTier.Aligned15C              // NotGreenOnContract, NotGreenOnCarbonBudget
+            0, 3, 4 -> ClimateTier.NotGreen             // NotSet, NotGreenOnBoth, NotGreenOnDeviceCarbonBudget
+            else -> ClimateTier.NotGreen
+        }
+    }
+
+    val climateTierRows: List<ClimateTierRow> = listOf(
+        ClimateTierRow(
+            ClimateTier.Green,
+            "Green",
+            "Using renewable electricity and within your carbon budget. Best time to use your device."
+        ),
+        ClimateTierRow(
+            ClimateTier.Aligned15C,
+            "1.5°C Aligned",
+            "Not on renewables, but still within your carbon budget. Switch to green electricity if possible."
+        ),
+        ClimateTierRow(
+            ClimateTier.NotGreen,
+            "Not Green",
+            "Carbon budget exceeded. Remove emissions and charge with green electricity."
+        )
+    )
 }

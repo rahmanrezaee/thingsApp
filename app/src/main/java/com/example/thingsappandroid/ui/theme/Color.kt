@@ -5,6 +5,8 @@ import androidx.compose.ui.graphics.Color
 // Brand Colors
 val PrimaryGreen = Color(0xFF39B54A)
 val DarkGreen = Color(0xFF009444)
+val Orange15C = Color(0xFFEE8C00)  // 1.5°C Aligned lightning icon
+val NotGreenRed = Color(0xFFD32F2F) // Not Green lightning icon
 val SecondaryGreen = Color(0xFFEBF9ED)
 val ActivityGreen = Color(0xFF5EA500)
 val BatteryYellow = Color(0xFFEEA811)

@@ -24,7 +24,7 @@ fun CarbonConnectionLine(
         targetValue = 0f, // End at top
         animationSpec = infiniteRepeatable(
             // Smoother linear animation without pauses
-            animation = tween(2500, easing = LinearEasing),
+            animation = tween(1600, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "Progress"

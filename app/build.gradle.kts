@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("com.google.dagger.hilt.android") version "2.57.1"
     kotlin("kapt")
+
+    id("io.sentry.android.gradle") version "5.12.2"
 }
 android {
     namespace = "com.example.thingsappandroid"
@@ -60,6 +62,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose) // Added navigation dependency
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.compose.runtime)
     testImplementation(libs.junit)
 
     implementation(libs.androidx.compose.material.icons.extended)
@@ -81,4 +84,16 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    
+    // Sentry
+    implementation(libs.sentry.android)
+}
+
+sentry {
+    org.set("heyflutter-2t")
+    projectName.set("android")
+
+    // this will upload your source code to Sentry to show it as part of the stack traces
+    // disable if you don't want to expose your sources
+    includeSourceContext.set(true)
 }

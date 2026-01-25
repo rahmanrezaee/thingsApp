@@ -20,4 +20,5 @@ class PreferenceManager(context: Context) {
     fun getDeviceId(): String? {
         return sharedPreferences.getString("device_id", null)
     }
+
 }

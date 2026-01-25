@@ -1,6 +1,7 @@
 package com.example.thingsappandroid.features.activity.components
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
@@ -24,7 +25,10 @@ import com.example.thingsappandroid.ui.theme.*
 fun MetricsList(
     consumptionKwh: Float = 0.14f,
     avoidedEmissions: Float = 0.00f,
-    carbonIntensity: Int = 0
+    carbonIntensity: Int = 0,
+    onElectricityConsumptionClick: (() -> Unit)? = null,
+    onAvoidedEmissionsClick: (() -> Unit)? = null,
+    onCarbonIntensityClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -33,19 +37,22 @@ fun MetricsList(
         MetricItem(
             icon = Icons.Rounded.Bolt,
             label = "Electricity Consumption",
-            value = String.format("%.2f kWh", consumptionKwh)
+            value = String.format("%.2f kWh", consumptionKwh),
+            onClick = onElectricityConsumptionClick
         )
         HorizontalDivider(color = Gray100, thickness = 1.dp)
         MetricItem(
             icon = Icons.Rounded.Public,
             label = "Avoided Carbon Emissions",
-            value = String.format("%.2f gCO₂e", avoidedEmissions)
+            value = String.format("%.2f gCO₂e", avoidedEmissions),
+            onClick = onAvoidedEmissionsClick
         )
         HorizontalDivider(color = Gray100, thickness = 1.dp)
         MetricItem(
             icon = Icons.Rounded.ElectricalServices,
             label = "Current Carbon Intensity",
-            value = "$carbonIntensity gCO₂e/kWh"
+            value = "$carbonIntensity gCO₂e/kWh",
+            onClick = onCarbonIntensityClick
         )
     }
 }
@@ -54,10 +61,12 @@ fun MetricsList(
 fun MetricItem(
     icon: ImageVector,
     label: String,
-    value: String
+    value: String,
+    onClick: (() -> Unit)? = null
 ) {
+    val modifier = if (onClick != null) Modifier.fillMaxWidth().clickable(onClick = onClick) else Modifier.fillMaxWidth()
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

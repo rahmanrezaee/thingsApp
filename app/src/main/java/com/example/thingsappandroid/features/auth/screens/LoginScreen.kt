@@ -40,7 +40,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.thingsappandroid.R
-import com.example.thingsappandroid.features.auth.viewModel.AuthIntent
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.ui.components.CustomTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
@@ -51,6 +50,7 @@ import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.thingsappandroid.features.auth.viewModel.AuthIntent
 
 @Composable
 fun LoginScreen() {
@@ -70,7 +70,7 @@ fun LoginScreen() {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
 
-        ) {
+            ) {
             Spacer(modifier = Modifier.height(screenHeight * 0.08f))
 
             // Header

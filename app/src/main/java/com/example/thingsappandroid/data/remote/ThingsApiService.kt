@@ -1,6 +1,7 @@
 package com.example.thingsappandroid.data.remote
 
 import com.example.thingsappandroid.data.model.*
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -15,10 +16,10 @@ interface ThingsApiService {
     suspend fun getToken(@Body request: Map<String, String>): Response<TokenResponse>
 
     @POST("/v4/thingsapp/registerdevice")
-    suspend fun registerDevice(@Body request: RegisterDeviceRequest): Response<BasicResponse> // Spec says success: true
+    suspend fun registerDevice(@Body request: RegisterDeviceRequest): Response<ResponseBody> // API returns [] on success
 
     @POST("/v4/thingsapp/getdeviceinfo")
-    suspend fun getDeviceInfo(@Body request: DeviceInfoRequest): Response<DeviceInfoResponse>
+    suspend fun getDeviceInfo(@Body request: DeviceInfoRequest): Response<DeviceInfoApiResponse>
 
     @POST("/v4/thingsapp/setdevicealias")
     suspend fun setDeviceAlias(@Body request: SetDeviceAliasRequest): Response<BasicResponse>
@@ -72,8 +73,8 @@ interface ThingsApiService {
     suspend fun getLatestMessages(): Response<LatestMessagesResponse>
 
     @POST("/v4/androidapp/adddeviceconsumption")
-    suspend fun addDeviceConsumption(@Body request: AndroidMeasurementRequest): Response<MeasurementResponse>
+    suspend fun addDeviceConsumption(@Body request: AndroidMeasurementModel): Response<MeasurementResponse>
 
     @POST("/v4/androidapp/adddeviceconsumptionrange")
-    suspend fun addDeviceConsumptionRange(@Body request: List<AndroidMeasurementRequest>): Response<BasicResponse>
+    suspend fun addDeviceConsumptionRange(@Body request: List<AndroidMeasurementModel>): Response<BasicResponse>
 }

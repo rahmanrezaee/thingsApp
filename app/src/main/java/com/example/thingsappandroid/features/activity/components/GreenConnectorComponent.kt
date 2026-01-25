@@ -2,6 +2,7 @@ package com.example.thingsappandroid.features.activity.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -16,18 +17,27 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.thingsappandroid.data.model.StationInfo
 import com.example.thingsappandroid.ui.components.common.SocketIcon
 import com.example.thingsappandroid.ui.components.common.WifiBadgeIcon
 import com.example.thingsappandroid.ui.theme.*
 
 @Composable
 fun GreenConnectorComponent(
-    isConnected: Boolean = false,
-    stationName: String? = null,
-    isGreen: Boolean = false
+    stationInfo: StationInfo? = null,
+    onEnterCodeClick: (() -> Unit)? = null
 ) {
-    val statusColor = if (isConnected && isGreen) ActivityGreen else if (isConnected) BatteryYellow else Gray400
-
+    // Determine connection state and colors
+    val isConnected = stationInfo != null
+    val isGreen = stationInfo?.isGreen == true
+    
+    // Status color: green if connected and green, red if connected but not green, gray if not connected
+    val statusColor = when {
+        isConnected && isGreen -> ActivityGreen
+        isConnected && !isGreen -> ErrorRed
+        else -> Gray400
+    }
+    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.TopEnd) {
             Box(
@@ -37,7 +47,7 @@ fun GreenConnectorComponent(
                     .background(Color(0xFFF5F5F5)),
                 contentAlignment = Alignment.Center
             ) {
-                SocketIcon()
+                SocketIcon(isConnected = isConnected, isGreen = isGreen)
             }
 
             Box(
@@ -45,8 +55,8 @@ fun GreenConnectorComponent(
                     .offset(x = 4.dp, y = (-2).dp)
                     .size(26.dp)
                     .clip(CircleShape)
-                    .background(if (isConnected) statusColor else Color.White)
-                    .border(1.dp, if (isConnected) statusColor else Gray100, CircleShape),
+                    .background(statusColor)
+                    .border(1.dp, statusColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                  WifiBadgeIcon(tint = if (isConnected) Color.White else Color(0xFFA3A3A3))
@@ -57,7 +67,7 @@ fun GreenConnectorComponent(
 
         val text = when {
             !isConnected -> "No GreenFi\nConnected"
-            stationName != null -> "$stationName\nConnected"
+            stationInfo?.stationName != null && stationInfo.stationName.isNotBlank() -> "${stationInfo.stationName}\nConnected"
             else -> "GreenFi\nConnected"
         }
 
@@ -71,6 +81,21 @@ fun GreenConnectorComponent(
             ),
             textAlign = TextAlign.Center
         )
+        
+        // Show "Enter Code" button if station is not green (no connection or connected but not green)
+        if (!isGreen && onEnterCodeClick != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Enter Code",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = PrimaryGreen
+                ),
+                modifier = Modifier.clickable(onClick = onEnterCodeClick),
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
@@ -78,6 +103,16 @@ fun GreenConnectorComponent(
 @Composable
 fun GreenConnectorComponentPreview() {
     ThingsAppAndroidTheme {
-        GreenConnectorComponent(isConnected = true, stationName = "Starbucks HQ", isGreen = true)
+        GreenConnectorComponent(
+            stationInfo = StationInfo(
+                stationName = "Starbucks HQ",
+                stationId = "test-id",
+                isGreen = true,
+                climateStatus = null,
+                country = null,
+                utilityName = null,
+                wifiAddress = null
+            )
+        )
     }
 }

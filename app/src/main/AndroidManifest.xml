@@ -6,11 +6,16 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
+        tools:ignore="ForegroundServicesPolicy" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
+        tools:ignore="FullScreenIntentPolicy" />
 
     <application
         android:name=".ThingsAppApplication"
@@ -20,7 +25,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.ThingsAppAndroid">
         <activity
@@ -29,8 +34,29 @@
             android:theme="@style/Theme.ThingsAppAndroid">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <!-- Custom action for station code notification -->
+                <action android:name="com.example.thingsappandroid.OPEN_STATION_CODE" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Transparent Activity for Authorization Dialog (Full-Screen Notification) -->
+        <activity
+            android:name=".AuthorizeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask">
+            <!-- Deep Link Handler for Authorization -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="umweltify"
+                    android:host="authorize" />
             </intent-filter>
         </activity>
 
@@ -38,7 +64,11 @@
             android:name=".services.BatteryService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Battery monitoring and charging session tracking for green energy verification" />
+        </service>
 
         <receiver
             android:name=".services.BootReceiver"
@@ -48,6 +78,26 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-    </application>
+
+        <receiver
+            android:name=".receivers.StationCodeReceiver"
+            android:enabled="true"
+            android:exported="false" />
+    
+    <!-- Required: set your sentry.io project identifier (DSN) -->
+    <meta-data android:name="io.sentry.dsn" android:value="https://a997e0dd8a9a495ae5a74755cc762050@o4507145257025536.ingest.de.sentry.io/4510749854400592" />
+    <!-- Add data like request headers, user ip address and device name, see https://docs.sentry.io/platforms/android/data-management/data-collected/ for more info -->
+    <meta-data android:name="io.sentry.send-default-pii" android:value="true" />
+
+    <!-- enable automatic breadcrumbs for user interactions (clicks, swipes, scrolls) -->
+    <meta-data android:name="io.sentry.traces.user-interaction.enable" android:value="true" />
+    <!-- enable screenshot for crashes (could contain sensitive/PII data) -->
+    <meta-data android:name="io.sentry.attach-screenshot" android:value="false" />
+    <!-- enable view hierarchy for crashes -->
+    <meta-data android:name="io.sentry.attach-view-hierarchy" android:value="true" />
+
+    <!-- enable the performance API by setting a sample-rate, adjust in production env -->
+    <meta-data android:name="io.sentry.traces.sample-rate" android:value="1.0" />
+</application>
 
 </manifest>

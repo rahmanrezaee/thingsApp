@@ -52,7 +52,9 @@ object WifiUtils {
         }
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(input.toByteArray(Charsets.UTF_8))
-        return Base64.encodeToString(hashBytes, Base64.DEFAULT)
+        val encoded = Base64.encodeToString(hashBytes, Base64.NO_WRAP)
+        // Remove any trailing whitespace/newlines just to be safe
+        return encoded.trim()
     }
 
     /**
@@ -68,17 +70,11 @@ object WifiUtils {
             val wifiInfo = wifiManager.connectionInfo
             val bssid = wifiInfo?.bssid
 
-            if (bssid != null && bssid != "02:00:00:00:00:00") {
-                // Hash the BSSID for privacy
-                val digest = MessageDigest.getInstance("SHA-256")
-                val hashBytes = digest.digest(bssid.toByteArray())
-                hashBytes.joinToString("") { "%02x".format(it) }
-            } else {
-                Log.w(TAG, "No valid BSSID found")
-                null
-            }
+            Log.d(TAG, "Raw BSSID: $bssid")
+
+            return simpleHash( wifiInfo?.bssid)
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting Wi-Fi BSSID: ${e.message}")
+            Log.e(TAG, "Error getting Wi-Fi BSSID: ${e.message}", e)
             null
         }
     }

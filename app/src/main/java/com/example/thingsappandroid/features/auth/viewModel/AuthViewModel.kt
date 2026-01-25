@@ -10,6 +10,9 @@ import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.ui.components.showErrorMessage
 import com.example.thingsappandroid.ui.components.showInfoMessage
 import com.example.thingsappandroid.ui.components.showSuccessMessage
+import io.sentry.Sentry
+import io.sentry.Breadcrumb
+import io.sentry.protocol.User
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +76,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     @SuppressLint("HardwareIds")
     private fun performGuestLogin() {
         viewModelScope.launch {
+            val loginBreadcrumb = Breadcrumb("User attempting guest login")
+            loginBreadcrumb.category = "user"
+            loginBreadcrumb.level = io.sentry.SentryLevel.INFO
+            Sentry.addBreadcrumb(loginBreadcrumb)
             _state.value = _state.value.copy(isGuestLoading = true, error = null)
 
             try {
@@ -81,7 +88,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     ?: UUID.randomUUID().toString()
 
                 // Step 1: Register the device first (all fields filled)
-                val deviceInfo = repository.syncDeviceInfo(deviceId)
+                val deviceInfo = repository.syncDeviceInfo(context = getApplication(), deviceId = deviceId, stationCode = null)
 
                 if (deviceInfo != null) {
                     // Step 2: Get authentication token
@@ -90,6 +97,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     if (token != null) {
                         // Save token in "secure format" (Private Mode SharedPreferences)
                         tokenManager.saveToken(token)
+                        
+                        val successBreadcrumb = Breadcrumb("Guest login successful")
+                        successBreadcrumb.category = "auth"
+                        successBreadcrumb.level = io.sentry.SentryLevel.INFO
+                        Sentry.addBreadcrumb(successBreadcrumb)
+                        
+                        val user = User()
+                        user.id = deviceId
+                        Sentry.setUser(user)
 
                         showSuccessMessage("Successfully connected to Things App!")
                         _effect.send(AuthEffect.NavigateToHome)
@@ -104,6 +120,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     tokenManager.clearToken()
                 }
             } catch (e: Exception) {
+                val deviceId = try {
+                    Settings.Secure.getString(getApplication<Application>().contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
+                } catch (ex: Exception) {
+                    "unknown"
+                }
+                Sentry.withScope { scope ->
+                    scope.setTag("operation", "performGuestLogin")
+                    scope.setContexts("auth", mapOf("device_id" to deviceId))
+                    Sentry.captureException(e)
+                }
                 showErrorMessage("Connection failed. Please check your internet connection.")
                 // Logout logic: Clear any potential partial state
                 tokenManager.clearToken()

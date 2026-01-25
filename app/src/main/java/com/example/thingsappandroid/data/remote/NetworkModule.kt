@@ -1,6 +1,8 @@
 package com.example.thingsappandroid.data.remote
 
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -18,6 +20,8 @@ object NetworkModule {
     fun setAuthToken(token: String?) {
         authToken = token
     }
+    
+    fun getAuthToken(): String? = authToken
 
     private val loggingInterceptor = HttpLoggingInterceptor { message ->
         Log.d("API_LOG", message)
@@ -41,11 +45,15 @@ object NetworkModule {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    private val gson: Gson = GsonBuilder()
+        // By default, Gson excludes null fields from JSON serialization
+        .create()
+
     val api: ThingsApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(ThingsApiService::class.java)
     }

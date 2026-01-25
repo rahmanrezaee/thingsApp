@@ -12,12 +12,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.ui.components.common.BatteryLiquidIndicator
 import com.example.thingsappandroid.ui.theme.*
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun BatteryCard(
     modifier: Modifier = Modifier,
     batteryLevel: Float = 0.84f,
-    isCharging: Boolean = true
+    isCharging: Boolean = true,
+    batteryCapacityMwh: Int? = null
 ) {
     Card(
         modifier = modifier.height(163.dp),
@@ -39,7 +42,9 @@ fun BatteryCard(
                         style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
                     )
                     Text(
-                        text = "80,000 mWh",
+                        text = batteryCapacityMwh?.let { capacity ->
+                            NumberFormat.getNumberInstance(Locale.US).format(capacity) + " mWh"
+                        } ?: "80,000 mWh", // Fallback to default if capacity not available
                         style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
                     )
                 }

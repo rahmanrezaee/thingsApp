@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -21,11 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,17 +41,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.SecondaryGreen
 import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class OnboardingPage(
@@ -57,7 +66,8 @@ data class OnboardingPage(
 
 @Composable
 fun OnboardingScreen(
-    onOnboardingFinished: () -> Unit
+    onOnboardingFinished: () -> Unit,
+    viewModel: OnboardingViewModel = hiltViewModel()
 ) {
     val pages = listOf(
         OnboardingPage(
@@ -80,16 +90,40 @@ fun OnboardingScreen(
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
     var isTermsAccepted by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+
+    // Handle ViewModel effects
+    LaunchedEffect(Unit) {
+        viewModel.effect.collectLatest { effect ->
+            android.util.Log.d("OnboardingScreen", "Received effect: $effect")
+            when (effect) {
+                is OnboardingEffect.NavigateToHome -> {
+                    android.util.Log.d("OnboardingScreen", "Navigating to home...")
+                    onOnboardingFinished()
+                    android.util.Log.d("OnboardingScreen", "onOnboardingFinished() called")
+                }
+                is OnboardingEffect.ShowError -> {
+                    android.util.Log.e("OnboardingScreen", "Error: ${effect.message}")
+                    android.widget.Toast.makeText(
+                        context,
+                        effect.message,
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = Color.White,
         bottomBar = {
-            // Bottom Action Area
+            // Bottom Action Area with system navigation bar padding
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
-                    .padding(bottom = 12.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
             ) {
                 if (pagerState.currentPage == pages.lastIndex) {
                     Column {
@@ -113,8 +147,8 @@ fun OnboardingScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Button(
-                            onClick = onOnboardingFinished,
-                            enabled = isTermsAccepted,
+                            onClick = { viewModel.onGetStartedClicked() },
+                            enabled = isTermsAccepted && !isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
@@ -125,11 +159,19 @@ fun OnboardingScreen(
                             ),
                             elevation = ButtonDefaults.buttonElevation(0.dp)
                         ) {
-                            Text(
-                                text = "Get Started",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Get Started",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 } else {
@@ -138,7 +180,12 @@ fun OnboardingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Button(
-                            onClick = onOnboardingFinished,
+                            onClick = {
+                                // Skip button should navigate to last page instead of finishing
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pages.lastIndex)
+                                }
+                            },
                             modifier = Modifier
                                 .weight(0.35f)
                                 .height(56.dp),

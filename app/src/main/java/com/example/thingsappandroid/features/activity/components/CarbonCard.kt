@@ -1,5 +1,6 @@
 package com.example.thingsappandroid.features.activity.components
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -11,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.ui.components.common.BatteryLiquidIndicator
 import com.example.thingsappandroid.ui.theme.*
 
+@SuppressLint("DefaultLocale")
 @Composable
 fun CarbonCard(
     modifier: Modifier = Modifier,
@@ -48,13 +50,15 @@ fun CarbonCard(
                     modifier = Modifier.padding(start = 56.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    Column (
+                        horizontalAlignment = Alignment.End
+                    ) {
                         Text(
                             text = String.format("%.2f ", currentUsage),
                             style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
                         )
                         Text(
-                            text = "gCO₂e",
+                            text = "gCO₂e ",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }

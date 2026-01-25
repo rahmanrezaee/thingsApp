@@ -253,43 +253,25 @@ fun ChargingRippleEffect(
 }
 
 @Composable
-fun SocketIcon() {
-    Canvas(modifier = Modifier.size(32.dp)) {
-        val strokeWidth = 2.5.dp.toPx()
-        val w = size.width
-        val h = size.height
-        
-        drawRoundRect(
-            color = Color(0xFF404040),
-            topLeft = Offset(strokeWidth/2, strokeWidth/2),
-            size = Size(w - strokeWidth, h - strokeWidth),
-            cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
-            style = Stroke(width = strokeWidth)
-        )
-        
-        drawCircle(
-            color = ActivityGreen,
-            radius = w * 0.32f,
-            center = center
-        )
-        
-        val holeW = 2.dp.toPx()
-        val holeH = 6.dp.toPx()
-        val spacing = 5.dp.toPx()
-        
-        drawRoundRect(
-            color = Color(0xFF202020),
-            topLeft = Offset(center.x - spacing - holeW/2, center.y - holeH/2),
-            size = Size(holeW, holeH),
-            cornerRadius = CornerRadius(holeW/2)
-        )
-        drawRoundRect(
-            color = Color(0xFF202020),
-            topLeft = Offset(center.x + spacing - holeW/2, center.y - holeH/2),
-            size = Size(holeW, holeH),
-            cornerRadius = CornerRadius(holeW/2)
-        )
+fun SocketIcon(
+    isConnected: Boolean = false,
+    isGreen: Boolean = false
+) {
+    val imageResId = when {
+        isConnected && isGreen -> R.drawable.green_station
+        isConnected && !isGreen -> R.drawable.no_green_station
+        else -> R.drawable.no_station
     }
+    
+    Image(
+        painter = painterResource(id = imageResId),
+        contentDescription = when {
+            isConnected && isGreen -> "Green station connected"
+            isConnected && !isGreen -> "Station connected but not green"
+            else -> "No station connected"
+        },
+        modifier = Modifier.size(45.dp)
+    )
 }
 
 @Composable

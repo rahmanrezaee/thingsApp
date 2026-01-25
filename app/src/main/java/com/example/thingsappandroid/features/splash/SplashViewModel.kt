@@ -10,6 +10,7 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -21,6 +22,7 @@ import javax.inject.Inject
 sealed class SplashEffect {
     object NavigateToHome : SplashEffect()
     object NavigateToOnboarding : SplashEffect()
+    data class ShowError(val message: String) : SplashEffect()
 }
 
 @HiltViewModel
@@ -55,6 +57,16 @@ class SplashViewModel @Inject constructor(
                 Settings.Secure.ANDROID_ID
             ) ?: UUID.randomUUID().toString()
 
+            // Check network connectivity first
+            if (!NetworkUtils.isNetworkAvailable(getApplication())) {
+                Log.w("SplashViewModel", "No network connection available")
+                _effect.send(SplashEffect.ShowError("No internet connection. Please check your network settings."))
+                // Still navigate to home - user can retry later
+                delay(2000) // Show error message briefly
+                _effect.send(SplashEffect.NavigateToHome)
+                return@launch
+            }
+
             // Always register device and get token (no login required)
             // 1. Check Local Token First
             val cachedToken = tokenManager.getToken()
@@ -64,26 +76,47 @@ class SplashViewModel @Inject constructor(
                 Log.d("SplashViewModel", "deviceId: $deviceId")
                 NetworkModule.setAuthToken(cachedToken)
                 
-                // Still register device to ensure it's synced
-                repository.syncDeviceInfo(deviceId)
+                // Still register device to ensure it's synced (with network check)
+                try {
+                    repository.syncDeviceInfo(getApplication(), deviceId, null)
+                } catch (e: Exception) {
+                    Log.w("SplashViewModel", "Failed to sync device info: ${e.message}")
+                    // Continue anyway - token is valid
+                }
                 
                 _effect.send(SplashEffect.NavigateToHome)
                 return@launch
             }
             
-            // 2. No token - authenticate to get token (device registration happens automatically)
-            val token = repository.authenticate(deviceId)
-            if (token != null) {
-                tokenManager.saveToken(token)
-                NetworkModule.setAuthToken(token)
+            // 2. No token - initialize device (register, get token, sync info)
+            try {
+                Log.d("SplashViewModel", "Initializing device for deviceId: $deviceId")
+                val (success, token, _) = repository.initializeDevice(getApplication(), deviceId, null)
                 
-                // Register device after getting token
-                repository.syncDeviceInfo(deviceId)
-                
-                _effect.send(SplashEffect.NavigateToHome)
-            } else {
-                // If authentication fails, still try to go to home (device can work offline)
-                Log.w("SplashViewModel", "Authentication failed, proceeding to home anyway")
+                if (success && token != null) {
+                    Log.d("SplashViewModel", "✓ Device initialized successfully")
+                    tokenManager.saveToken(token)
+                    NetworkModule.setAuthToken(token)
+                    _effect.send(SplashEffect.NavigateToHome)
+                } else {
+                    Log.e("SplashViewModel", "Device initialization failed")
+                    _effect.send(SplashEffect.ShowError("Failed to authenticate. Please check your internet connection and try again."))
+                    delay(2000)
+                    _effect.send(SplashEffect.NavigateToHome)
+                }
+            } catch (e: Exception) {
+                Log.e("SplashViewModel", "Error during initialization: ${e.message}", e)
+                val errorMessage = when {
+                    e.message?.contains("UnknownHostException") == true || 
+                    e.message?.contains("Unable to resolve host") == true -> 
+                        "Cannot connect to server. Please check your internet connection."
+                    e.message?.contains("timeout") == true -> 
+                        "Connection timeout. Please try again."
+                    else -> 
+                        "Failed to connect. Please check your internet connection."
+                }
+                _effect.send(SplashEffect.ShowError(errorMessage))
+                delay(2000)
                 _effect.send(SplashEffect.NavigateToHome)
             }
         }

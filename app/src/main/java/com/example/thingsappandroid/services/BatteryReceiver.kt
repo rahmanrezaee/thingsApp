@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -33,36 +35,64 @@ data class BatteryState(
  */
 object BatteryReceiver {
     fun observe(context: Context): Flow<BatteryState> = callbackFlow {
+        fun extractBatteryState(intent: Intent): BatteryState {
+            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+
+            val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            val batteryPct = if (level >= 0 && scale > 0) {
+                (level * 100 / scale)
+            } else {
+                0
+            }
+
+            val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+
+            return BatteryState(
+                isCharging = isCharging,
+                voltage = voltage,
+                level = batteryPct,
+                plugged = plugged
+            )
+        }
+
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
-                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                            status == BatteryManager.BATTERY_STATUS_FULL
-                    
-                    val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
-                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    val batteryPct = if (level >= 0 && scale > 0) {
-                        (level * 100 / scale)
-                    } else {
-                        0
+                when (intent?.action) {
+                    Intent.ACTION_BATTERY_CHANGED -> {
+                        trySend(extractBatteryState(intent))
                     }
-                    
-                    val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
-                    
-                    trySend(BatteryState(
-                        isCharging = isCharging,
-                        voltage = voltage,
-                        level = batteryPct,
-                        plugged = plugged
-                    ))
+                    Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> {
+                        // For power events, we need to fetch the sticky battery intent to get levels/voltage
+                        val batteryIntent = context?.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                        batteryIntent?.let {
+                            trySend(extractBatteryState(it))
+                        }
+                    }
                 }
             }
         }
         
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        context.registerReceiver(receiver, filter)
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        // Use ContextCompat for Android 13+ compatibility (RECEIVER_NOT_EXPORTED required)
+        // System broadcasts don't need to be exported
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
         
         // Get initial battery state
         val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))

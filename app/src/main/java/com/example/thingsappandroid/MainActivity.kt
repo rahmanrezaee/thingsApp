@@ -11,50 +11,31 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.navigation.NavType
-import com.example.thingsappandroid.services.BatteryService
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.example.thingsappandroid.features.auth.viewModel.AuthEffect
-import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
-import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
-import com.example.thingsappandroid.features.auth.screens.LoginScreen
-import com.example.thingsappandroid.features.auth.screens.SignUpScreen
-import com.example.thingsappandroid.features.MainScreen
 import com.example.thingsappandroid.data.local.PreferenceManager
+import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
+import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
+import com.example.thingsappandroid.navigation.AppNavigation
+import com.example.thingsappandroid.services.BatteryService
+import com.example.thingsappandroid.ui.components.GlobalMessageHost
+import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
-import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
-import com.example.thingsappandroid.features.auth.screens.VerifyScreen
-import com.example.thingsappandroid.features.onboarding.OnboardingScreen
-import com.example.thingsappandroid.features.splash.SplashScreen
-import com.example.thingsappandroid.features.splash.SplashViewModel
-import com.example.thingsappandroid.features.splash.SplashEffect
-import com.example.thingsappandroid.navigation.Screen
-import com.example.thingsappandroid.ui.components.GlobalMessageHost
-import com.example.thingsappandroid.ui.components.PrimaryButton
-import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
-import kotlinx.coroutines.flow.collectLatest
-
+import io.sentry.Sentry
+import io.sentry.Breadcrumb
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
     @Inject
     lateinit var preferenceManager: PreferenceManager
 
@@ -69,7 +50,8 @@ class MainActivity : ComponentActivity() {
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: true // Default to true for older versions
+            permissions[Manifest.permission.POST_NOTIFICATIONS]
+                ?: true // Default to true for older versions
         } else {
             true
         }
@@ -79,14 +61,28 @@ class MainActivity : ComponentActivity() {
         if (_locationPermissionGranted) {
             Toast.makeText(this, "Location permission granted!", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "Location permission is required to use this app.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Location permission is required to use this app.",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         if (!notificationGranted) {
-            Toast.makeText(this, "Notification permission recommended for background service.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Notification permission recommended for background service.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        
+        // Start the service after notification permission is granted (Android 14+)
+        if (notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startChargingDetectionService()
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun checkAndRequestPermissions() {
         val fineLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
@@ -96,13 +92,10 @@ class MainActivity : ComponentActivity() {
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val notificationGranted =
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
 
         _locationPermissionGranted = fineLocationGranted || coarseLocationGranted
 
@@ -121,33 +114,107 @@ class MainActivity : ComponentActivity() {
 
     private fun startChargingDetectionService() {
         try {
-            val serviceIntent = Intent(this, BatteryService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Log.d("MainActivity", "Starting foreground service")
-                startForegroundService(serviceIntent)
-            } else {
-                Log.d("MainActivity", "Starting background service")
-                startService(serviceIntent)
+            // For Android 14+ (API 34), check if notification permission is granted before starting foreground service
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val notificationGranted = ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+                
+                if (!notificationGranted) {
+                    Log.w("MainActivity", "Notification permission not granted, delaying service start")
+                    Toast.makeText(
+                        this,
+                        "ERROR: Notification permission required for Android 14+ (${Build.MANUFACTURER} ${Build.MODEL})",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    // Service will be started after permission is granted
+                    return
+                }
             }
-            Log.d("MainActivity", "Service start command issued")
+            
+            val serviceIntent = Intent(this, BatteryService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    Log.d("MainActivity", "Starting foreground service BatteryService")
+                    startForegroundService(serviceIntent)
+                    Log.d("MainActivity", "startForegroundService() called successfully")
+                } else {
+                    Log.d("MainActivity", "Starting background service BatteryService")
+                    startService(serviceIntent)
+                    Log.d("MainActivity", "startService() called successfully")
+                }
+                Log.d("MainActivity", "Service start command issued for BatteryService")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "ERROR starting BatteryService: ${e.message}", e)
+                e.printStackTrace()
+                Toast.makeText(this, "Failed to start BatteryService: ${e.message}", Toast.LENGTH_LONG).show()
+            }
 
             // Check if service is running after a short delay
-            android.os.Handler(mainLooper).postDelayed({
-                if (isServiceRunning(BatteryService::class.java)) {
-                    Log.d("MainActivity", "Service is confirmed running")
-                    runOnUiThread {
+            // Use a Handler that's properly scoped to avoid dead thread issues
+            val handler = android.os.Handler(mainLooper)
+            handler.postDelayed({
+                if (!isFinishing && !isDestroyed) {
+                    if (isServiceRunning(BatteryService::class.java)) {
+                        Log.d("MainActivity", "Service is confirmed running")
                         Toast.makeText(this, "Background service started", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Log.w("MainActivity", "Service may not be running")
-                    runOnUiThread {
+                    } else {
+                        Log.w("MainActivity", "Service may not be running")
                         Toast.makeText(this, "Service start failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             }, 2000)
+        } catch (e: SecurityException) {
+            Log.e("MainActivity", "SecurityException starting service", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "startChargingDetectionService")
+                scope.setTag("error_type", "SecurityException")
+                scope.setContexts("service", mapOf(
+                    "manufacturer" to Build.MANUFACTURER,
+                    "model" to Build.MODEL,
+                    "sdk_int" to Build.VERSION.SDK_INT.toString()
+                ))
+                Sentry.captureException(e)
+            }
+            Toast.makeText(
+                this,
+                "ERROR: Security - Cannot start service: ${e.message} (${Build.MANUFACTURER} ${Build.MODEL} API${Build.VERSION.SDK_INT})",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: IllegalStateException) {
+            Log.e("MainActivity", "IllegalStateException starting service", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "startChargingDetectionService")
+                scope.setTag("error_type", "IllegalStateException")
+                scope.setContexts("service", mapOf(
+                    "manufacturer" to Build.MANUFACTURER,
+                    "model" to Build.MODEL,
+                    "sdk_int" to Build.VERSION.SDK_INT.toString()
+                ))
+                Sentry.captureException(e)
+            }
+            Toast.makeText(
+                this,
+                "ERROR: IllegalState - Service start failed: ${e.message} (${Build.MANUFACTURER} ${Build.MODEL} API${Build.VERSION.SDK_INT})",
+                Toast.LENGTH_LONG
+            ).show()
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to start service", e)
-            Toast.makeText(this, "Failed to start background service", Toast.LENGTH_SHORT).show()
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "startChargingDetectionService")
+                scope.setContexts("service", mapOf(
+                    "manufacturer" to Build.MANUFACTURER,
+                    "model" to Build.MODEL,
+                    "sdk_int" to Build.VERSION.SDK_INT.toString()
+                ))
+                Sentry.captureException(e)
+            }
+            Toast.makeText(
+                this,
+                "ERROR: ${e.javaClass.simpleName} - Service start failed: ${e.message} (${Build.MANUFACTURER} ${Build.MODEL} API${Build.VERSION.SDK_INT})",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -165,13 +232,32 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Removed enableEdgeToEdge() to keep status bar as a solid block
 
-        // Check permissions on app start
-        checkAndRequestPermissions()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+ (API 34+) - request permissions first
+            checkAndRequestPermissions()
+            
+            // Also check if permissions are already granted and start service immediately
+            val notificationGranted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            if (notificationGranted) {
+                Log.d("MainActivity", "Notification permission already granted, starting service immediately")
+                startChargingDetectionService()
+            } else {
+                Log.d("MainActivity", "Notification permission not granted, will start service after permission is granted")
+            }
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                checkAndRequestPermissions()
+            }
+            startChargingDetectionService()
+        }
 
-        // Start the charging detection service
-        startChargingDetectionService()
+        handleDeepLink(intent)
+        checkStationCodeIntent(intent)
 
         setContent {
             ThingsAppAndroidTheme {
@@ -189,166 +275,71 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-
                 val navController = rememberNavController()
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    NavHost(
+                    AppNavigation(
                         navController = navController,
-                        startDestination = "splash_route"
-                    ) {
-                        composable("splash_route") {
-                            val splashViewModel: SplashViewModel = hiltViewModel()
-
-
-                                androidx.compose.runtime.LaunchedEffect(Unit) {
-                                    splashViewModel.effect.collectLatest { effect ->
-                                        when (effect) {
-                                            is SplashEffect.NavigateToHome -> {
-                                                navController.navigate(Screen.Home.route) {
-                                                    popUpTo("splash_route") { inclusive = true }
-                                                }
-                                            }
-                                            is SplashEffect.NavigateToOnboarding -> {
-                                                navController.navigate(Screen.Onboarding.route) {
-                                                    popUpTo("splash_route") { inclusive = true }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                SplashScreen()
-
-                        }
-
-                        composable(Screen.Onboarding.route) {
-                            OnboardingScreen(
-                                onOnboardingFinished = {
-                                    preferenceManager.setOnboardingCompleted(true)
-                                    navController.navigate(Screen.Login.route) {
-                                        popUpTo(Screen.Onboarding.route) { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
-
-                        composable(Screen.Login.route) {
-                            LoginScreen()
-
-                            // Handle AuthViewModel effects
-                            val authViewModel: AuthViewModel = viewModel()
-                            androidx.compose.runtime.LaunchedEffect(Unit) {
-                                authViewModel.effect.collectLatest { effect ->
-                                    when (effect) {
-                                        is AuthEffect.NavigateToSignUp -> {
-                                            navController.navigate(Screen.SignUp.route)
-                                        }
-
-                                        is AuthEffect.NavigateToForgotPassword -> {
-                                            navController.navigate(Screen.ForgotPassword.route)
-                                        }
-
-                                        is AuthEffect.NavigateToHome -> {
-                                            navController.navigate(Screen.Home.route) {
-                                                popUpTo(Screen.Login.route) { inclusive = true }
-                                            }
-                                        }
-
-                                        else -> {
-                                            // Toast effects are handled in LoginScreen
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        composable(Screen.SignUp.route) {
-                            SignUpScreen(
-                                onSignUpClick = { email ->
-                                    navController.navigate(Screen.Verify.createRoute(email, false))
-                                },
-                                onLoginClick = {
-                                    navController.popBackStack()
-                                }
-                            )
-                        }
-
-                        composable(
-                            route = Screen.Verify.route,
-                            arguments = listOf(
-                                navArgument("email") { type = NavType.StringType },
-                                navArgument("isFromForgot") { type = NavType.BoolType }
-                            )
-                        ) { backStackEntry ->
-                            val email = backStackEntry.arguments?.getString("email") ?: ""
-                            val isFromForgot =
-                                backStackEntry.arguments?.getBoolean("isFromForgot") ?: false
-
-                            VerifyScreen(
-                                email = email,
-                                isFromForgot = isFromForgot,
-                                onVerifyClick = {
-                                    Toast.makeText(context, "Verified!", Toast.LENGTH_SHORT).show()
-                                    if (isFromForgot) {
-                                        navController.navigate(Screen.Login.route) {
-                                            popUpTo(Screen.Login.route) { inclusive = true }
-                                        }
-                                    } else {
-                                        navController.navigate(Screen.Login.route) {
-                                            popUpTo(Screen.SignUp.route) { inclusive = true }
-                                        }
-                                    }
-                                },
-                                onResendClick = {
-                                    Toast.makeText(
-                                        context,
-                                        "Code resent to $email",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                onBackClick = {
-                                    navController.popBackStack()
-                                }
-                            )
-                        }
-
-                        composable(Screen.ForgotPassword.route) {
-                            ForgotPasswordScreen(
-                                onSendResetLink = { email ->
-                                    navController.navigate(Screen.Verify.createRoute(email, true))
-                                },
-                                onNavigateBack = {
-                                    navController.popBackStack()
-                                }
-                            )
-                        }
-
-                        composable(Screen.Home.route) {
-                            val homeViewModel: ActivityViewModel = viewModel()
-
-                            // Check location permissions when entering home screen
-                            androidx.compose.runtime.LaunchedEffect(Unit) {
+                        onOnboardingFinished = { preferenceManager.setOnboardingCompleted(true) },
+                        onRequestPermissions = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 checkAndRequestPermissions()
                             }
-
-                            androidx.compose.runtime.LaunchedEffect(Unit) {
-                                homeViewModel.effect.collectLatest { effect ->
-                                    if (effect is ActivityEffect.NavigateToLogin) {
-                                        navController.navigate(Screen.Login.route) {
-                                            popUpTo(Screen.Home.route) { inclusive = true }
-                                        }
-                                    }
-                                }
-                            }
-
-                            MainScreen(navController = navController)
-                        }
-                    }
+                        },
+                        initialIntent = intent
+                    )
 
                     // Global message host for showing messages across all screens
                     GlobalMessageHost()
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // Handle deep link when app is already running
+        intent?.let {
+            setIntent(it) // Update the activity intent so checkStationCodeIntent sees latest extras
+            handleDeepLink(it)
+            checkStationCodeIntent(it)
+        }
+    }
+
+    private fun checkStationCodeIntent(intent: Intent?) {
+        Log.d(
+            "MainActivity",
+            "Checking intent: Action=${intent?.action}, Extras=${intent?.extras?.keySet()}"
+        )
+
+        if (intent?.action == "com.example.thingsappandroid.OPEN_STATION_CODE" ||
+            intent?.getBooleanExtra("open_station_code_dialog", false) == true
+        ) {
+
+            Log.d("MainActivity", "STATION CODE INTENT DETECTED. Dispatching to ViewModel.")
+            try {
+                val viewModel = ViewModelProvider(this)[ActivityViewModel::class.java]
+                viewModel.dispatch(ActivityIntent.OpenStationCodeDialog)
+                Log.d("MainActivity", "Dispatched OpenStationCodeDialog to ActivityViewModel")
+                intent.action = null
+                intent.removeExtra("open_station_code_dialog")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error dispatching station code intent", e)
+                Sentry.withScope { scope ->
+                    scope.setTag("operation", "checkStationCodeIntent")
+                    Sentry.captureException(e)
+                }
+            }
+        }
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        if (intent?.data != null) {
+            val data = intent.data
+            Log.d(
+                "MainActivity",
+                "Deep link received: ${data?.scheme}://${data?.host}${data?.path}?${data?.query}"
+            )
         }
     }
 }

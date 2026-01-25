@@ -33,10 +33,10 @@ fun ChargingConnectionLine(
         targetValue = 0f, // End at top
         animationSpec = infiniteRepeatable(
             animation = keyframes {
-                durationMillis = 2500
+                durationMillis = 1600
                 1f at 0
-                0f at 1500 using FastOutSlowInEasing
-                0f at 2500
+                0f at 1000 using FastOutSlowInEasing
+                0f at 1600
             },
             repeatMode = RepeatMode.Restart
         ),
