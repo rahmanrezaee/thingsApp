@@ -69,6 +69,9 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             ActivityIntent.Initialize -> initialize()
             ActivityIntent.RefreshData -> refreshServerData()
             ActivityIntent.Logout -> performLogout()
+            ActivityIntent.NavigateToLogin -> {
+                viewModelScope.launch { _effect.send(ActivityEffect.NavigateToLogin) }
+            }
             is ActivityIntent.SubmitStationCode -> submitStationCode(intent.stationCode)
             ActivityIntent.OpenStationCodeDialog -> {
                 _state.update { it.copy(showStationCodeDialog = true) }

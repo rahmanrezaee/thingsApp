@@ -14,13 +14,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.thingsappandroid.features.activity.components.HomeBottomBar
 import com.example.thingsappandroid.features.activity.screens.ActivityScreen
 import com.example.thingsappandroid.features.home.screens.HomeScreen
+import com.example.thingsappandroid.features.profile.screens.ProfileScreen
 import com.example.thingsappandroid.features.shop.screens.ShopScreen
 import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
 import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
@@ -62,30 +63,27 @@ fun MainScreen(
         bottomBar = {
             HomeBottomBar(
                 selectedTab = currentTab,
-                onTabSelected = { newIndex -> 
-                    if (newIndex == 3) {
-                        // Redirect profile (3) tab to LoginScreen
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.Home.route) { inclusive = false }
-                        }
-                    } else {
-                        currentTab = newIndex
-                    }
-                }
+                onTabSelected = { newIndex -> currentTab = newIndex }
             )
         },
-        containerColor = Color.White
+        containerColor = MaterialTheme.colorScheme.surface
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when (currentTab) {
                 0 -> HomeScreen(
                     state = state,
                     onIntent = { homeViewModel.dispatch(it) }
-                ) // Activity content is now in Home
+                )
                 1 -> {} // Keep for now, can be removed later
                 2 -> {} // Keep for now, can be removed later
-//                2 -> ShopScreen(deviceName = state.deviceName) // Shop screen - no auth required
-                3 -> {} // Profile tab redirects to LoginScreen
+                3 -> ProfileScreen(
+                    deviceName = state.deviceName,
+                    userEmail = null,
+                    onLogout = { homeViewModel.dispatch(ActivityIntent.Logout) },
+                    onMyAccountClick = { homeViewModel.dispatch(ActivityIntent.NavigateToLogin) },
+                    onAppThemeClick = { navController.navigate(Screen.AppTheme.route) },
+                    onAboutClick = { navController.navigate(Screen.About.route) }
+                )
             }
         }
 

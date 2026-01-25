@@ -29,6 +29,8 @@ import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
 import com.example.thingsappandroid.features.auth.screens.LoginScreen
 import com.example.thingsappandroid.features.auth.screens.SignUpScreen
 import com.example.thingsappandroid.features.auth.screens.VerifyScreen
+import com.example.thingsappandroid.features.profile.screens.AboutScreen
+import com.example.thingsappandroid.features.profile.screens.AppThemeScreen
 import com.example.thingsappandroid.features.auth.viewModel.AuthEffect
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.features.auth.viewModel.AuthorizeViewModel
@@ -252,6 +254,14 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
             )
+        }
+
+        composable(Screen.AppTheme.route) {
+            AppThemeScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.About.route) {
+            AboutScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.Home.route) {

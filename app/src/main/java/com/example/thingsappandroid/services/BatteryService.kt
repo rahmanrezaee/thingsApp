@@ -337,11 +337,14 @@ class BatteryService : Service() {
     private fun startNotificationMonitoring() {
         serviceScope.launch {
             while (true) {
-                delay(200) // Check every 200ms for dismissals
-                
+                delay(200)
+
+                // Only recreate when we're supposed to be showing (charging). Don't show while not charging.
+                if (chargeState?.isCharging != true) continue
+
                 val activeNotifications = notificationManager.activeNotifications
                 val ourNotificationExists = activeNotifications.any { it.id == NOTIFICATION_ID }
-                
+
                 if (!ourNotificationExists) {
                     Log.w(TAG, "Notification was dismissed! Recreating immediately...")
                     recreateForegroundNotification()
@@ -357,37 +360,28 @@ class BatteryService : Service() {
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun recreateForegroundNotification() {
         try {
+            if (chargeState?.isCharging != true) return // Don't show notification while not charging
+
             val dcsInfo = getDeviceClimateStatusInfo()
-            
-            // Get current charging state for subtitle
-            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            val isChargingRecreate = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)?.let {
-                it == BatteryManager.BATTERY_STATUS_CHARGING || it == BatteryManager.BATTERY_STATUS_FULL
-            } ?: false
-            val subtitleRecreate = if (isChargingRecreate) {
-                "Charging"
-            } else {
-                "" // Empty when not charging
-            }
-            
+
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(dcsInfo.iconRes)
                 .setColor(dcsInfo.color)
-                .setContentTitle(dcsInfo.title) // "Green Climate Status", "No Green", or "Align"
-                .setContentText(if (subtitleRecreate.isNotEmpty()) subtitleRecreate else null) // Just "Charging" or empty
+                .setContentTitle(dcsInfo.title)
+                .setContentText("Charging")
                 .setAutoCancel(false)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setContentIntent(contentIntent)
-                .setDefaults(0) // No sound/vibration on recreation
+                .setDefaults(0)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setShowWhen(false)
                 .clearActions()
-            
+
             val builtNotification = notificationBuilder.build()
             builtNotification.flags = builtNotification.flags or Notification.FLAG_NO_CLEAR
-            
+
             startForeground(
                 NOTIFICATION_ID,
                 builtNotification,
@@ -675,53 +669,55 @@ class BatteryService : Service() {
         val currentNow = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
 
         serviceScope.launch {
-            var currentAmperes = BatteryUtil.getBatteryCurrentNowInAmperes(currentNow)
-            
             val isCharging = chargeState?.isCharging == true
-            val hasCorrectSign = (isCharging && currentAmperes > 0) || (!isCharging && currentAmperes < 0)
-            
-            if (!hasCorrectSign && kotlin.math.abs(currentAmperes) > 0.01) {
-                if (isCharging) {
-                    currentAmperes = kotlin.math.abs(currentAmperes)
-                } else {
-                    currentAmperes = -kotlin.math.abs(currentAmperes)
+
+            // Don't show notification when not charging: remove it and return.
+            if (!isCharging) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(Service.STOP_FOREGROUND_REMOVE)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
+                    }
+                    notificationManager.cancel(NOTIFICATION_ID)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error hiding notification when not charging: ${e.message}", e)
                 }
+                return@launch
             }
-            
+
+            var currentAmperes = BatteryUtil.getBatteryCurrentNowInAmperes(currentNow)
+            val hasCorrectSign = (isCharging && currentAmperes > 0) || (!isCharging && currentAmperes < 0)
+
+            if (!hasCorrectSign && kotlin.math.abs(currentAmperes) > 0.01) {
+                currentAmperes = kotlin.math.abs(currentAmperes)
+            }
+
             try {
-                // Get DCS information
                 val dcsInfo = getDeviceClimateStatusInfo()
-//                Log.d(TAG, "Updating notification with DCS: ${currentDCS.name}, Color: ${dcsInfo.color}")
-                
-                // Build subtitle: "Charging" if charging, otherwise empty
-                val subtitle = if (isCharging) {
-                    "Charging"
-                } else {
-                    "" // Empty when not charging
-                }
-                
+
                 val updatedNotificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(dcsInfo.iconRes)
                     .setColor(dcsInfo.color)
-                    .setContentTitle(dcsInfo.title) // "Green Climate Status", "No Green", or "Align"
-                    .setContentText(if (subtitle.isNotEmpty()) subtitle else null) // Just "Charging" or empty
+                    .setContentTitle(dcsInfo.title)
+                    .setContentText("Charging")
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
                     .setContentIntent(contentIntent)
-                    .setDefaults(0) // No sound/vibration on updates
+                    .setDefaults(0)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setCategory(NotificationCompat.CATEGORY_SERVICE)
                     .setShowWhen(false)
                     .clearActions()
-            
+
                 val builtNotification = updatedNotificationBuilder.build()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     builtNotification.flags = builtNotification.flags or Notification.FLAG_NO_CLEAR
                 }
-                
+
                 try {
-//                    Log.d(TAG, "Updating foreground notification with ID: $NOTIFICATION_ID")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         startForeground(
                             NOTIFICATION_ID,
@@ -731,7 +727,6 @@ class BatteryService : Service() {
                     } else {
                         startForeground(NOTIFICATION_ID, builtNotification)
                     }
-//                    Log.d(TAG, "Notification updated successfully")
                 } catch (e: Exception) {
                     Log.e(TAG, "Error updating foreground notification: ${e.message}", e)
                     e.printStackTrace()
@@ -750,7 +745,7 @@ class BatteryService : Service() {
                         }
                     }
                 }
-                
+
                 notification = updatedNotificationBuilder
             } catch (e: Exception) {
                 Log.e(TAG, "Error in updateNotification: ${e.message}", e)

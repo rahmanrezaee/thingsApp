@@ -14,14 +14,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.rememberNavController
 import com.example.thingsappandroid.data.local.PreferenceManager
+// import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
+// import com.example.thingsappandroid.ui.theme.ThemeMode
 import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
 import com.example.thingsappandroid.navigation.AppNavigation
@@ -260,21 +259,11 @@ class MainActivity : ComponentActivity() {
         checkStationCodeIntent(intent)
 
         setContent {
+            // Theme: dynamic System/Light/Dark disabled; using fixed system-based theme. Status bar aligned in Theme.kt.
+            // val activity = LocalContext.current as ComponentActivity
+            // val themeViewModel: ThemeViewModel = viewModel(viewModelStoreOwner = activity)
+            // val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
             ThingsAppAndroidTheme {
-                val context = LocalContext.current
-
-                // Fix StatusBar color to match app background
-                SideEffect {
-                    val window = (context as? ComponentActivity)?.window
-                    if (window != null) {
-                        @Suppress("DEPRECATION")
-                        window.statusBarColor = android.graphics.Color.WHITE
-                        WindowCompat.getInsetsController(window, window.decorView).apply {
-                            isAppearanceLightStatusBars = true
-                        }
-                    }
-                }
-
                 val navController = rememberNavController()
 
                 Box(modifier = Modifier.fillMaxSize()) {

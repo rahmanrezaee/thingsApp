@@ -1,7 +1,6 @@
 package com.example.thingsappandroid.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -27,18 +26,21 @@ private val LightColorScheme = lightColorScheme(
 fun ThingsAppAndroidTheme(
     content: @Composable () -> Unit
 ) {
-    val colorScheme = LightColorScheme
-
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
+            // Status bar background matches app bar (surface white).
+            window.statusBarColor = BackgroundWhite.toArgb()
+            WindowCompat.getInsetsController(window, view).apply {
+                // Light theme: dark status bar icons on light background.
+                isAppearanceLightStatusBars = true
+            }
         }
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = LightColorScheme,
         typography = Typography,
         content = content
     )

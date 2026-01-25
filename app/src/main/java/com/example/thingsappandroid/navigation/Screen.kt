@@ -13,6 +13,8 @@ sealed class Screen(val route: String) {
     }
     
     object Home : Screen("home")
+    object AppTheme : Screen("app_theme")
+    object About : Screen("about")
 
     object Authorize : Screen("authorize?requestedby={requestedby}&requestedUrl={requestedUrl}&sessionId={sessionId}") {
         fun createRoute(requestedBy: String, requestedUrl: String, sessionId: String) =

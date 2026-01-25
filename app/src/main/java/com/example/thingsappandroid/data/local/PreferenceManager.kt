@@ -21,4 +21,11 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getString("device_id", null)
     }
 
+    fun getThemeMode(): String {
+        return sharedPreferences.getString("theme_mode", "system") ?: "system"
+    }
+
+    fun setThemeMode(mode: String) {
+        sharedPreferences.edit().putString("theme_mode", mode).apply()
+    }
 }

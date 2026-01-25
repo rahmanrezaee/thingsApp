@@ -49,6 +49,7 @@ sealed class ActivityIntent {
     object RefreshData : ActivityIntent()
     object Initialize : ActivityIntent()
     object Logout : ActivityIntent()
+    object NavigateToLogin : ActivityIntent()
     data class SubmitStationCode(val stationCode: String) : ActivityIntent()
     object OpenStationCodeDialog : ActivityIntent()
     object CloseStationCodeDialog : ActivityIntent()
