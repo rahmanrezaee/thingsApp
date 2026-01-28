@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -24,13 +25,17 @@ import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.theme.*
 
 @Composable
-fun LowCarbonComponent(intensity: Int = 96) {
+fun LowCarbonComponent(
+    intensity: Int = 96,
+    isGreen: Boolean = false
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFF5F5F5)),
+                .background(Color(0xFFF5F5F5))
+                .then(if (isGreen) Modifier.alpha(0.55f) else Modifier),
             contentAlignment = Alignment.Center
         ) {
             Image(

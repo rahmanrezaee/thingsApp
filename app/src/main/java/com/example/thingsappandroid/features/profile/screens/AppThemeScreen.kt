@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +41,11 @@ fun AppThemeScreen(
     val themeModeState = viewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
     val themeMode = themeModeState.value
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+    ) {
         BackButtonTopBar(title = "App Theme", onBack = onBack)
         Column(
             modifier = Modifier

@@ -10,9 +10,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
@@ -34,8 +31,8 @@ fun MainScreen(
     navController: NavController,
     homeViewModel: ActivityViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
-    var currentTab by remember { mutableIntStateOf(0) } // Default to Activity (1)
     val state by homeViewModel.state.collectAsState()
+    val currentTab = state.selectedBottomTabIndex
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -63,7 +60,7 @@ fun MainScreen(
         bottomBar = {
             HomeBottomBar(
                 selectedTab = currentTab,
-                onTabSelected = { newIndex -> currentTab = newIndex }
+                onTabSelected = { newIndex -> homeViewModel.dispatch(ActivityIntent.SelectBottomTab(newIndex)) }
             )
         },
         containerColor = MaterialTheme.colorScheme.surface

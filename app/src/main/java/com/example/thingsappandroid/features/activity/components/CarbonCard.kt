@@ -48,22 +48,19 @@ fun CarbonCard(
 
                 Column(
                     modifier = Modifier.padding(start = 56.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Column (
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = String.format("%.2f ", currentUsage),
-                            style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
-                        )
-                        Text(
-                            text = "gCO₂e ",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
+                    Text(
+                        text = String.format("%.2f ", currentUsage),
+                        style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
+                    )
+                    HorizontalDivider(color = Gray300, thickness = 1.dp)
+                    Text(
+                        text = "gCO₂e ",
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
-                Spacer(modifier = Modifier.height(24.dp))
             }
 
             BatteryLiquidIndicator(

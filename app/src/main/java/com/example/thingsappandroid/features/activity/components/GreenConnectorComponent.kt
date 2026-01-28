@@ -38,13 +38,16 @@ fun GreenConnectorComponent(
         else -> Gray400
     }
     
+    // Icon circle background: green when status is green, gray otherwise
+    val iconCircleBackground = if (isGreen) ActivityGreen else Color(0xFFF5F5F5)
+    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.TopEnd) {
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF5F5F5)),
+                    .background(iconCircleBackground),
                 contentAlignment = Alignment.Center
             ) {
                 SocketIcon(isConnected = isConnected, isGreen = isGreen)

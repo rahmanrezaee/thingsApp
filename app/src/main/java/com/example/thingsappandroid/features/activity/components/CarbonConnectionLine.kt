@@ -15,35 +15,39 @@ import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 @Composable
 fun CarbonConnectionLine(
     isCharging: Boolean,
-    height: Dp = 48.dp
+    height: Dp = 48.dp,
+    isGreen: Boolean = false
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "Carbon")
+    // When status is green, do not show the connection line / moving icon (empty placeholder keeps layout)
+    if (isGreen) {
+        Box(modifier = Modifier.width(28.dp).height(height))
+    } else {
+        val infiniteTransition = rememberInfiniteTransition(label = "Carbon")
 
-    val progress by infiniteTransition.animateFloat(
-        initialValue = 1f, // Start at bottom
-        targetValue = 0f, // End at top
-        animationSpec = infiniteRepeatable(
-            // Smoother linear animation without pauses
-            animation = tween(1600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "Progress"
-    )
+        val progress by infiniteTransition.animateFloat(
+            initialValue = 1f, // Start at bottom
+            targetValue = 0f, // End at top
+            animationSpec = infiniteRepeatable(
+                animation = tween(1600, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "Progress"
+        )
 
-    Box(
-        modifier = Modifier
-            .width(28.dp)
-            .height(height),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        // Moving Icon
-        if (isCharging) {
-            Box(
-                modifier = Modifier
-                    .offset(y = height * progress - 14.dp)
-                    .size(28.dp)
-            ) {
-                Co2CloudIcon()
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .height(height),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            if (isCharging) {
+                Box(
+                    modifier = Modifier
+                        .offset(y = height * progress - 14.dp)
+                        .size(28.dp)
+                ) {
+                    Co2CloudIcon()
+                }
             }
         }
     }

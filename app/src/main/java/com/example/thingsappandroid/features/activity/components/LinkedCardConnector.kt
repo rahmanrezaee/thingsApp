@@ -38,6 +38,7 @@ fun LinkedCardConnector(
     topContent: @Composable () -> Unit,
     bottomContentLeft: @Composable () -> Unit,
     bottomContentRight: @Composable () -> Unit,
+    isGreen: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -49,18 +50,17 @@ fun LinkedCardConnector(
             topContent()
         }
 
-        // 2. The Connector Graphic (Canvas)
+        // 2. The Connector Graphic (Canvas) - sits below top content; when green, right energy flow is disabled
         ConnectorGraphic(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(46.dp) // Fixed height to match geometry
-                .offset(y = (-4).dp) // Tuck the top cap under the top content
-                .zIndex(0f)
+                .zIndex(0f),
+            isGreen = isGreen
         )
-
-        // 3. Bottom Widgets (Split Row)
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(15.dp)
         ) {
             Box(modifier = Modifier.weight(1f)) {
@@ -75,7 +75,8 @@ fun LinkedCardConnector(
 
 @Composable
 private fun ConnectorGraphic(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isGreen: Boolean = false
 ) {
     val density = LocalDensity.current
 
@@ -237,7 +238,7 @@ private fun ConnectorGraphic(
             val rightLength = rightMeasure.length
 
             onDrawBehind {
-                // 1. Draw The Pipe (Static)
+                // 1. Draw The Pipe (Static) - always show both pipes
                 drawPath(leftPath, ColorBackgroundStroke, style = Stroke(width = strokeWidth))
                 drawPath(rightPath, ColorBackgroundStroke, style = Stroke(width = strokeWidth))
 
@@ -246,7 +247,7 @@ private fun ConnectorGraphic(
                 drawPath(bottomLeftCap, ColorCapFill)
                 drawPath(bottomRightCap, ColorCapFill)
 
-                // 3. Draw The Energy (Animation)
+                // 3. Draw The Energy (Animation) - when green, only disable right energy flow (pipe stays visible)
                 val segmentLength = 20f
 
                 fun drawFlow(measure: PathMeasure, length: Float, flowColor: Color = ColorFlow) {
@@ -279,7 +280,9 @@ private fun ConnectorGraphic(
                 }
 
                 drawFlow(leftMeasure, leftLength, ColorFlow) // Green energy flow for battery
-                drawFlow(rightMeasure, rightLength, ColorCarbonFlow) // Dark carbon energy flow for carbon card
+                if (!isGreen) {
+                    drawFlow(rightMeasure, rightLength, ColorCarbonFlow) // Right energy flow: only disabled when green; pipe and cap stay visible
+                }
 
                 // 4. Draw The Pulse (Cap Fill Effect) - Reversed flow: bottom to top
                 // Flow stops before reaching top, so cap animation should also stop earlier

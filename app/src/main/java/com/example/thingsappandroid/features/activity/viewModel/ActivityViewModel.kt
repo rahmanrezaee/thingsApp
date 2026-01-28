@@ -128,6 +128,9 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             ActivityIntent.DismissCarbonIntensityMetricSheet -> {
                 _state.update { it.copy(showCarbonIntensityMetricSheet = false) }
             }
+            is ActivityIntent.SelectBottomTab -> {
+                _state.update { it.copy(selectedBottomTabIndex = intent.index) }
+            }
         }
     }
 

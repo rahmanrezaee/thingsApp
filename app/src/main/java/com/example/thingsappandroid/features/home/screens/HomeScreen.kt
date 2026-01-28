@@ -60,8 +60,10 @@ fun HomeScreen(
 
             // Activity content moved here from ActivityScreen
             state.deviceInfo?.let { deviceInfo ->
+                val isGreen = state.stationInfo?.isGreen == true
 
                 LinkedCardConnector(
+                    isGreen = isGreen,
                     topContent = {
                         Box(
                             modifier = Modifier.clickable { onIntent(ActivityIntent.OpenClimateStatusSheet) }
@@ -142,14 +144,14 @@ fun HomeScreen(
                                     .zIndex(0f),
                                 contentAlignment = Alignment.TopCenter
                             ) {
-                                CarbonConnectionLine(height = 54.dp, isCharging = state.isCharging)
+                                CarbonConnectionLine(height = 54.dp, isCharging = state.isCharging, isGreen = isGreen)
                             }
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-8).dp)
                                     .clickable { onIntent(ActivityIntent.OpenGridIntensitySheet) }
                             ) {
-                                LowCarbonComponent(intensity = state.carbonIntensity)
+                                LowCarbonComponent(intensity = state.carbonIntensity, isGreen = isGreen)
                             }
                         }
                     }

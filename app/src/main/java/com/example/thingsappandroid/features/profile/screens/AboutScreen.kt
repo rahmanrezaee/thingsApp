@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
@@ -57,7 +58,11 @@ fun AboutScreen(
     val thingId = deviceInfo?.thingId ?: "—"
     val version = BuildConfig.VERSION_NAME.ifBlank { "1.0" }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+    ) {
         BackButtonTopBar(title = "About", onBack = onBack)
         Column(
             modifier = Modifier

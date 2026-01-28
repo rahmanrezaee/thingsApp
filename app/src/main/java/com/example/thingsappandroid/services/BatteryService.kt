@@ -208,22 +208,10 @@ class BatteryService : Service() {
                 android.R.drawable.ic_dialog_info
             }
             
-            // Get initial charging state for subtitle
-            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            val isChargingInitial = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)?.let {
-                it == BatteryManager.BATTERY_STATUS_CHARGING || it == BatteryManager.BATTERY_STATUS_FULL
-            } ?: false
-            val subtitleInitial = if (isChargingInitial) {
-                "Charging"
-            } else {
-                "" // Empty when not charging
-            }
-            
             notification = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(iconRes) // Use ic_power icon if available, otherwise system icon
                 .setColor(initialDcsInfo.color) // Set color based on climate status (green/orange/red/gray)
-                .setContentTitle(initialDcsInfo.title) // "Green Climate Status", "No Green", or "Align"
-                .setContentText(if (subtitleInitial.isNotEmpty()) subtitleInitial else null) // Just "Charging" or empty
+                .setContentTitle(initialDcsInfo.title) // "Green", "Align", or "Not green"
                 .setAutoCancel(false)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -256,8 +244,7 @@ class BatteryService : Service() {
             // Fallback to basic notification if DCS info fails
             notification = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Device Climate Status")
-                .setContentText("Monitoring device status...")
+                .setContentTitle("Not green")
                 .setAutoCancel(false)
                 .setOngoing(true)
                 .setContentIntent(contentIntent)
@@ -360,15 +347,12 @@ class BatteryService : Service() {
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun recreateForegroundNotification() {
         try {
-            if (chargeState?.isCharging != true) return // Don't show notification while not charging
-
             val dcsInfo = getDeviceClimateStatusInfo()
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(dcsInfo.iconRes)
                 .setColor(dcsInfo.color)
                 .setContentTitle(dcsInfo.title)
-                .setContentText("Charging")
                 .setAutoCancel(false)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -416,7 +400,7 @@ class BatteryService : Service() {
 
                     if (isCharging && !wasCharging && !isInitialization) {
                         handleChargingStarted()
-                        
+                        // Show "Enter Code" only when not in green status (no station code set)
                         if (currentStationCode.isNullOrBlank()) {
                             serviceScope.launch {
                                 delay(3000)
@@ -462,27 +446,27 @@ class BatteryService : Service() {
                 val voltage = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) / 1000.0 // Volts
                 val health = batteryIntent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)
                 
-                // Determine DCS based on multiple factors
+                // Determine DCS based on multiple factors.
+                // When disconnected from charger, keep previous (base) ClimateStatus instead of switching to "Not green".
                 currentDCS = when {
                     // Critical conditions
-                    temperature > 45 || health == BatteryManager.BATTERY_HEALTH_OVERHEAT -> 
+                    temperature > 45 || health == BatteryManager.BATTERY_HEALTH_OVERHEAT ->
                         DeviceClimateStatus.CRITICAL
-                    
+
                     temperature > 40 || health == BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE ->
                         DeviceClimateStatus.WARNING
-                    
+
                     // Good conditions - charging with renewable energy
                     batteryState.isCharging && !currentStationCode.isNullOrBlank() && temperature < 35 ->
                         DeviceClimateStatus.EXCELLENT
-                    
+
                     // Normal charging
                     batteryState.isCharging && temperature < 38 ->
                         DeviceClimateStatus.GOOD
-                    
-                    // Not charging but healthy
-                    !batteryState.isCharging && temperature < 35 ->
-                        DeviceClimateStatus.NORMAL
-                    
+
+                    // Not charging: keep base/previous ClimateStatus (don't overwrite with NORMAL/"Not green")
+                    !batteryState.isCharging -> currentDCS
+
                     else -> DeviceClimateStatus.UNKNOWN
                 }
                 
@@ -513,21 +497,21 @@ class BatteryService : Service() {
             DeviceClimateStatus.EXCELLENT -> DCSInfo(
                 iconRes = iconRes,
                 color = 0xFF4CAF50.toInt(), // Green
-                title = "Green Climate Status",
+                title = "Green",
                 description = "Charging with green energy",
                 detailedDescription = "Your device is charging optimally with verified renewable energy."
             )
             DeviceClimateStatus.GOOD -> DCSInfo(
                 iconRes = iconRes,
                 color = 0xFF4CAF50.toInt(), // Green
-                title = "Green Climate Status",
+                title = "Green",
                 description = "Charging normally",
                 detailedDescription = "Your device is charging with good conditions."
             )
             DeviceClimateStatus.NORMAL -> DCSInfo(
                 iconRes = iconRes,
                 color = 0xFF9E9E9E.toInt(), // Gray (neutral)
-                title = "No Green",
+                title = "Not green",
                 description = "Device operating normally",
                 detailedDescription = "Your device is operating normally."
             )
@@ -548,7 +532,7 @@ class BatteryService : Service() {
             DeviceClimateStatus.UNKNOWN -> DCSInfo(
                 iconRes = iconRes,
                 color = 0xFF9E9E9E.toInt(), // Gray (neutral)
-                title = "No Green",
+                title = "Not green",
                 description = "Monitoring device status",
                 detailedDescription = "Monitoring device status..."
             )
@@ -671,22 +655,6 @@ class BatteryService : Service() {
         serviceScope.launch {
             val isCharging = chargeState?.isCharging == true
 
-            // Don't show notification when not charging: remove it and return.
-            if (!isCharging) {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        stopForeground(Service.STOP_FOREGROUND_REMOVE)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        stopForeground(true)
-                    }
-                    notificationManager.cancel(NOTIFICATION_ID)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error hiding notification when not charging: ${e.message}", e)
-                }
-                return@launch
-            }
-
             var currentAmperes = BatteryUtil.getBatteryCurrentNowInAmperes(currentNow)
             val hasCorrectSign = (isCharging && currentAmperes > 0) || (!isCharging && currentAmperes < 0)
 
@@ -701,7 +669,6 @@ class BatteryService : Service() {
                     .setSmallIcon(dcsInfo.iconRes)
                     .setColor(dcsInfo.color)
                     .setContentTitle(dcsInfo.title)
-                    .setContentText("Charging")
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)

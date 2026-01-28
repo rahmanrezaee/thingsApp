@@ -41,6 +41,9 @@ data class ActivityState(
     val showAvoidedEmissionsSheet: Boolean = false,
     val showCarbonIntensityMetricSheet: Boolean = false,
 
+    /** Persists selected bottom nav tab so back from profile sub-screens returns to Profile, not Home */
+    val selectedBottomTabIndex: Int = 0,
+
     val error: String? = null
 )
 
@@ -70,6 +73,7 @@ sealed class ActivityIntent {
     object DismissAvoidedEmissionsSheet : ActivityIntent()
     object OpenCarbonIntensityMetricSheet : ActivityIntent()
     object DismissCarbonIntensityMetricSheet : ActivityIntent()
+    data class SelectBottomTab(val index: Int) : ActivityIntent()
 }
 
 // 3. Effects (One-off events like Navigation/Toast)
