@@ -321,7 +321,7 @@ class ThingsRepository {
                     stationCode = stationCode,
                     wifiAddress = wifiAddress
                 )
-                Log.d("ThingsRepo", "DeviceInfoRequest - DeviceId: ${request.deviceId}, WiFiAddress: ${request.wifiAddress}, Latitude: ${request.latitude}, Longitude: ${request.longitude}")
+                Log.d("ThingsRepo", "DeviceInfoRequest - DeviceId: ${request.deviceId}, WiFiAddress: ${request.wifiAddress}")
                 
                 val infoResponse = api.getDeviceInfo(request)
 

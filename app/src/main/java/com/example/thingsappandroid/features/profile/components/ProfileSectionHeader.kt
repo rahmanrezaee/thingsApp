@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.ui.components
+package com.example.thingsappandroid.features.profile.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding

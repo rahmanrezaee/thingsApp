@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.ui.components
+package com.example.thingsappandroid.features.home.components
 
 import android.content.Intent
 import android.net.Uri

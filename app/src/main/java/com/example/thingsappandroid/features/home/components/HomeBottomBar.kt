@@ -1,7 +1,6 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable

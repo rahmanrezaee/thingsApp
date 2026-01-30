@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.viewModel
+package com.example.thingsappandroid.features.home.viewModel
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -9,16 +9,12 @@ import android.location.LocationManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import android.content.Intent
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
-import com.example.thingsappandroid.data.model.DeviceInfoApiResponse
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
-import com.example.thingsappandroid.data.model.DeviceInfoResponse
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.services.BatteryMonitor
@@ -27,6 +23,7 @@ import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
 import io.sentry.Breadcrumb
+import io.sentry.SentryLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -35,10 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-// Helper data class for multiple return values
-private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
-class ActivityViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // Dependencies
     private val repository = ThingsRepository()
@@ -50,8 +44,8 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     private var wasCharging = false
 
     // MVI State
-    private val _state = MutableStateFlow(ActivityState())
-    val state: StateFlow<ActivityState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(HomeState())
+    val state: StateFlow<HomeState> = _state.asStateFlow()
 
     // MVI Effect
     private val _effect = Channel<ActivityEffect>()
@@ -224,18 +218,14 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         _state.update { it.copy(isLoading = true) }
         val deviceId = getDeviceId()
         
-        // Run location and API calls on IO thread to avoid blocking main thread
-        val (latitude, longitude, wifiAddress, stationCode) = withContext(Dispatchers.IO) {
-            val loc = getCurrentLocation()
+        val (wifiAddress, stationCode) = withContext(Dispatchers.IO) {
             val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
             val station = _state.value.stationCode
-            Quadruple(loc.first, loc.second, wifi, station)
+            Pair(wifi, station)
         }
 
         try {
-            Log.d("ActivityViewModel", "Loading device info with coordinates: $latitude, $longitude")
-            Log.d("ActivityViewModel", "WiFi Address: $wifiAddress")
-            Log.d("ActivityViewModel", "Station Code: $stationCode")
+            Log.d("ActivityViewModel", "WiFi Address: $wifiAddress, Station Code: $stationCode")
             
             val response = withContext(Dispatchers.IO) {
                 NetworkModule.api.getDeviceInfo(
@@ -243,8 +233,6 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                         deviceId = deviceId,
                         stationCode = stationCode,
                         wifiAddress = wifiAddress,
-                        latitude = latitude,
-                        longitude = longitude,
                         currentVersion = "1.0.0" // Could get from BuildConfig.VERSION_NAME
                     )
                 )
@@ -271,6 +259,15 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                     ClimateUtils.getMappedClimateData(statusInt)
                 } ?: ClimateUtils.getMappedClimateData(null as String?)
 
+                preferenceManager.saveClimateStatus(deviceInfo.climateStatus)
+
+                val hasStation = deviceInfo.stationInfo != null
+                preferenceManager.setHasStation(hasStation)
+                if (hasStation) {
+                    getApplication<Application>().sendBroadcast(
+                        android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                    )
+                }
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -330,7 +327,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                 Log.w("ActivityViewModel", "Failed to get battery capacity: ${e.message}")
                 Sentry.withScope { scope ->
                     scope.setTag("operation", "getBatteryCapacity")
-                    scope.level = io.sentry.SentryLevel.WARNING
+                    scope.level = SentryLevel.WARNING
                     Sentry.captureException(e)
                 }
                 // Don't show Toast on background thread - it's not critical
@@ -430,7 +427,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val stationBreadcrumb = Breadcrumb("User submitting station code")
             stationBreadcrumb.category = "user"
-            stationBreadcrumb.level = io.sentry.SentryLevel.INFO
+            stationBreadcrumb.level = SentryLevel.INFO
             stationBreadcrumb.setData("station_code", stationCode)
             Sentry.addBreadcrumb(stationBreadcrumb)
             _state.update {

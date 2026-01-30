@@ -14,6 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
@@ -21,8 +24,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.thingsappandroid.data.local.PreferenceManager
 // import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
 // import com.example.thingsappandroid.ui.theme.ThemeMode
-import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
-import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
+import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
+import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.navigation.AppNavigation
 import com.example.thingsappandroid.services.BatteryService
 import com.example.thingsappandroid.ui.components.GlobalMessageHost
@@ -30,7 +33,6 @@ import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import io.sentry.Sentry
-import io.sentry.Breadcrumb
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -38,9 +40,25 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var preferenceManager: PreferenceManager
 
-    // Permission state - will be accessed from composables
-    private var _locationPermissionGranted = false
+    // Both location and notification are required; app is blocked until granted.
+    private var hasAllRequiredPermissions by mutableStateOf(false)
 
+    private fun computeHasAllRequiredPermissions(): Boolean {
+        val locationGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return locationGranted && notificationGranted
+    }
 
     // Permission request launcher for location and notifications
     private val permissionLauncher = registerForActivityResult(
@@ -49,60 +67,55 @@ class MainActivity : ComponentActivity() {
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions[Manifest.permission.POST_NOTIFICATIONS]
-                ?: true // Default to true for older versions
+            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: true
         } else {
             true
         }
 
-        _locationPermissionGranted = fineLocationGranted || coarseLocationGranted
+        val locationGranted = fineLocationGranted || coarseLocationGranted
+        hasAllRequiredPermissions = locationGranted && notificationGranted
 
-        if (_locationPermissionGranted) {
-            Toast.makeText(this, "Location permission granted!", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(
-                this,
-                "Location permission is required to use this app.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        if (!notificationGranted) {
-            Toast.makeText(
-                this,
-                "Notification permission recommended for background service.",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-        
-        // Start the service after notification permission is granted (Android 14+)
-        if (notificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (hasAllRequiredPermissions) {
+            Toast.makeText(this, "Permissions granted. You can use the app.", Toast.LENGTH_SHORT).show()
             startChargingDetectionService()
+        } else {
+            if (!locationGranted) {
+                Toast.makeText(
+                    this,
+                    "Location permission is required to use this app.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
+                Toast.makeText(
+                    this,
+                    "Notification permission is required to use this app.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun checkAndRequestPermissions() {
+    /** Request location and notification permissions. Call when user taps "Grant permissions" on the required-permissions screen. */
+    fun checkAndRequestPermissions() {
         val fineLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-
         val coarseLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-
-        val notificationGranted =
+        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-
-        _locationPermissionGranted = fineLocationGranted || coarseLocationGranted
+        } else {
+            true
+        }
 
         val permissionsToRequest = mutableListOf<String>()
-
         if (!fineLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
         if (!coarseLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (!notificationGranted) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
@@ -231,27 +244,10 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        hasAllRequiredPermissions = computeHasAllRequiredPermissions()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+ (API 34+) - request permissions first
-            checkAndRequestPermissions()
-            
-            // Also check if permissions are already granted and start service immediately
-            val notificationGranted = ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            
-            if (notificationGranted) {
-                Log.d("MainActivity", "Notification permission already granted, starting service immediately")
-                startChargingDetectionService()
-            } else {
-                Log.d("MainActivity", "Notification permission not granted, will start service after permission is granted")
-            }
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                checkAndRequestPermissions()
-            }
+        // Start service only if both permissions are already granted (e.g. returning user)
+        if (hasAllRequiredPermissions) {
             startChargingDetectionService()
         }
 
@@ -259,26 +255,17 @@ class MainActivity : ComponentActivity() {
         checkStationCodeIntent(intent)
 
         setContent {
-            // Theme: dynamic System/Light/Dark disabled; using fixed system-based theme. Status bar aligned in Theme.kt.
-            // val activity = LocalContext.current as ComponentActivity
-            // val themeViewModel: ThemeViewModel = viewModel(viewModelStoreOwner = activity)
-            // val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
             ThingsAppAndroidTheme {
                 val navController = rememberNavController()
-
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavigation(
                         navController = navController,
                         onOnboardingFinished = { preferenceManager.setOnboardingCompleted(true) },
-                        onRequestPermissions = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                checkAndRequestPermissions()
-                            }
-                        },
+                        onRequestPermissions = { checkAndRequestPermissions() },
+                        hasAllRequiredPermissions = hasAllRequiredPermissions,
                         initialIntent = intent
                     )
 
-                    // Global message host for showing messages across all screens
                     GlobalMessageHost()
                 }
             }
@@ -307,7 +294,7 @@ class MainActivity : ComponentActivity() {
 
             Log.d("MainActivity", "STATION CODE INTENT DETECTED. Dispatching to ViewModel.")
             try {
-                val viewModel = ViewModelProvider(this)[ActivityViewModel::class.java]
+                val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
                 viewModel.dispatch(ActivityIntent.OpenStationCodeDialog)
                 Log.d("MainActivity", "Dispatched OpenStationCodeDialog to ActivityViewModel")
                 intent.action = null

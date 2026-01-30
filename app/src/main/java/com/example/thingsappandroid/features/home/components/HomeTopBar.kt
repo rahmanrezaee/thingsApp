@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*

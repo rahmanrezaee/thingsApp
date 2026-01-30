@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas

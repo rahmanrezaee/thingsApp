@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.components.common.BatteryLiquidIndicator
 import com.example.thingsappandroid.ui.theme.*
 
 @SuppressLint("DefaultLocale")

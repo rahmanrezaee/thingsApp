@@ -1,7 +1,6 @@
 package com.example.thingsappandroid.navigation
 
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -22,8 +21,8 @@ import androidx.navigation.compose.dialog
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.example.thingsappandroid.features.MainScreen
-import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
-import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
+import com.example.thingsappandroid.features.home.viewModel.ActivityEffect
+import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.features.auth.screens.AuthorizeScreen
 import com.example.thingsappandroid.features.auth.screens.ForgotPasswordScreen
 import com.example.thingsappandroid.features.auth.screens.LoginScreen
@@ -34,11 +33,13 @@ import com.example.thingsappandroid.features.profile.screens.AppThemeScreen
 import com.example.thingsappandroid.features.auth.viewModel.AuthEffect
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.features.auth.viewModel.AuthorizeViewModel
+import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.onboarding.OnboardingScreen
 import com.example.thingsappandroid.features.splash.SplashScreen
 import com.example.thingsappandroid.features.splash.SplashEffect
 import com.example.thingsappandroid.features.splash.SplashViewModel
-import com.example.thingsappandroid.ui.components.StationCodeDialog
+import com.example.thingsappandroid.features.home.components.StationCodeDialog
+import com.example.thingsappandroid.features.permission.RequiredPermissionsScreen
 import kotlinx.coroutines.flow.collectLatest
 
 @Composable
@@ -46,6 +47,7 @@ fun AppNavigation(
     navController: NavHostController,
     onOnboardingFinished: () -> Unit,
     onRequestPermissions: () -> Unit,
+    hasAllRequiredPermissions: Boolean,
     initialIntent: Intent? = null,
     modifier: Modifier = Modifier
 ) {
@@ -115,9 +117,20 @@ fun AppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = "splash_route",
+        startDestination = if (hasAllRequiredPermissions) "splash_route" else "permission_route",
         modifier = modifier
     ) {
+        composable("permission_route") {
+            RequiredPermissionsScreen(onGrantPermissions = onRequestPermissions)
+            LaunchedEffect(hasAllRequiredPermissions) {
+                if (hasAllRequiredPermissions) {
+                    navController.navigate("splash_route") {
+                        popUpTo("permission_route") { inclusive = true }
+                    }
+                }
+            }
+        }
+
         composable("splash_route") {
             val splashViewModel: SplashViewModel = hiltViewModel()
 
@@ -265,12 +278,7 @@ fun AppNavigation(
         }
 
         composable(Screen.Home.route) {
-            val homeViewModel: ActivityViewModel = viewModel()
-
-            // Check location permissions when entering home screen
-            LaunchedEffect(Unit) {
-                onRequestPermissions()
-            }
+            val homeViewModel: HomeViewModel = viewModel()
 
             LaunchedEffect(Unit) {
                 homeViewModel.effect.collectLatest { effect ->
@@ -290,7 +298,7 @@ fun AppNavigation(
             route = Screen.StationCode.route,
             dialogProperties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            val activityViewModel: ActivityViewModel = viewModel()
+            val activityViewModel: HomeViewModel = viewModel()
             // Access state directly as getters/setters were removed
             val currentStationCode = activityViewModel.state.collectAsState().value.stationCode ?: ""
             
@@ -298,7 +306,7 @@ fun AppNavigation(
                 onDismiss = { navController.popBackStack() },
                 onConfirm = { stationCode ->
                     // Dispatch intent instead of calling removed method
-                    activityViewModel.dispatch(com.example.thingsappandroid.features.activity.viewModel.ActivityIntent.SubmitStationCode(stationCode))
+                    activityViewModel.dispatch(ActivityIntent.SubmitStationCode(stationCode))
                     navController.popBackStack()
                 },
                 initialValue = currentStationCode

@@ -36,51 +36,55 @@ object ClimateUtils {
         gradientColors = listOf(Color(0xFFE57373), Color(0xFFD32F2F)) // Red gradient
     )
 
+    private val alignedData = ClimateData(
+        title = "Align",
+        description = "Within carbon budget. Switch to green electricity if possible.",
+        gradientColors = listOf(Color(0xFFFF9800), Color(0xFFF57C00)) // Orange gradient for Align
+    )
+
+    /** ClientStatus mapping: 0,1,2,3,4 = Not green; 5,6,7,9 = Green; 8 = Align. */
     fun getMappedClimateData(status: String?): ClimateData {
         if (status == null) return greenData
 
         return when {
-            status.contains("GreenOn", ignoreCase = true) ||
+            status.contains("GreenOnDeviceCarbonBudget", ignoreCase = true) -> alignedData  // 8 = Align
             status.contains("GreenOnContract", ignoreCase = true) ||
             status.contains("GreenOnCarbonBudget", ignoreCase = true) ||
             status.contains("GreenOnBoth", ignoreCase = true) ||
-            status.contains("GreenOnDeviceCarbonBudget", ignoreCase = true) ||
-            status.contains("GreenOnEACs", ignoreCase = true) -> greenData
+            status.contains("GreenOnEACs", ignoreCase = true) -> greenData                   // 5,6,7,9 = Green
             status.contains("NotGreen", ignoreCase = true) ||
-            status.contains("NotSet", ignoreCase = true) -> notGreenData
+            status.contains("NotSet", ignoreCase = true) -> notGreenData                    // 0,1,2,3,4 = Not green
             else -> greenData
         }
     }
 
+    /** ClientStatus mapping: 0,1,2,3,4 = Not green; 5,6,7,9 = Green; 8 = Align. */
     fun getMappedClimateData(statusInt: Int?): ClimateData {
         if (statusInt == null) return greenData
 
-        val status = when (statusInt) {
-            0 -> "NotSet"
-            1 -> "NotGreenOnContract"
-            2 -> "NotGreenOnCarbonBudget"
-            3 -> "NotGreenOnBoth"
-            4 -> "NotGreenOnDeviceCarbonBudget"
-            5 -> "GreenOnContract"
-            6 -> "GreenOnCarbonBudget"
-            7 -> "GreenOnBoth"
-            8 -> "GreenOnDeviceCarbonBudget"
-            9 -> "GreenOnEACs"
-            else -> "NotSet"
+        return when (statusInt) {
+            0, 1, 2, 3, 4 -> notGreenData   // Not green
+            5, 6, 7, 9 -> greenData          // Green
+            8 -> alignedData                // Align
+            else -> notGreenData
         }
-
-        return getMappedClimateData(status)
     }
 
-    /** Maps API climate status Int to tier for bottom sheet (Green / 1.5°C Aligned / Not Green). */
+    /** Maps API climateStatus Int to tier: 8 = Align; 0,1,2,3,4 = Not green; 5,6,7,9 = Green. */
     fun getClimateTier(statusInt: Int?): ClimateTier {
         if (statusInt == null) return ClimateTier.Green
         return when (statusInt) {
-            5, 6, 7, 8, 9 -> ClimateTier.Green           // GreenOn*
-            1, 2 -> ClimateTier.Aligned15C              // NotGreenOnContract, NotGreenOnCarbonBudget
-            0, 3, 4 -> ClimateTier.NotGreen             // NotSet, NotGreenOnBoth, NotGreenOnDeviceCarbonBudget
+            5, 6, 7, 9 -> ClimateTier.Green      // Green
+            8 -> ClimateTier.Aligned15C          // Align
+            0, 1, 2, 3, 4 -> ClimateTier.NotGreen // Not green
             else -> ClimateTier.NotGreen
         }
+    }
+
+    /** Returns true only when climateStatus is Green (5, 6, 7, 9). 8 = Align and 0-4 = Not green are not "green". */
+    fun isGreenFromClimateStatus(statusInt: Int?): Boolean {
+        if (statusInt == null) return false
+        return statusInt in listOf(5, 6, 7, 9)
     }
 
     val climateTierRows: List<ClimateTierRow> = listOf(

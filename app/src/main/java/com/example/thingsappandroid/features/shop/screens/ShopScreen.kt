@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,7 +30,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.example.thingsappandroid.features.activity.components.HomeTopBar
+import com.example.thingsappandroid.features.home.components.HomeTopBar
 import com.example.thingsappandroid.ui.components.CustomTextField
 import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.*

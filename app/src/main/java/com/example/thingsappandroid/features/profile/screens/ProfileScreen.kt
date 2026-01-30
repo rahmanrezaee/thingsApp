@@ -27,8 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.thingsappandroid.ui.components.ProfileListItem
-import com.example.thingsappandroid.ui.components.ProfileSectionHeader
+import com.example.thingsappandroid.features.profile.components.ProfileListItem
+import com.example.thingsappandroid.features.profile.components.ProfileSectionHeader
 import com.example.thingsappandroid.ui.theme.Gray500
 import com.example.thingsappandroid.ui.theme.TextPrimary
 import com.example.thingsappandroid.ui.theme.TextSecondary

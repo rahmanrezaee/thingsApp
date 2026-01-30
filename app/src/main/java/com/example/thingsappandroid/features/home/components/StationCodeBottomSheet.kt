@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.ui.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,8 +11,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.thingsappandroid.ui.components.CustomTextField
+import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.google.gson.Gson
 import com.example.thingsappandroid.ui.theme.*
+import kotlin.collections.get
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

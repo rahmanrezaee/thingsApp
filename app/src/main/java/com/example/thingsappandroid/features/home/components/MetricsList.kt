@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable

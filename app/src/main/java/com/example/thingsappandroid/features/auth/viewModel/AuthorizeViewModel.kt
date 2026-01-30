@@ -146,30 +146,14 @@ class AuthorizeViewModel(application: Application) : AndroidViewModel(applicatio
         initialize()
     }
 
+    /** Station code is set only from Home → StationBottomSheet, not from this screen. */
     fun verifyStationCode(code: String) {
         if (_uiState.value.isLoading) return
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, isSuccess = false) }
-
-            try {
-                val deviceId = Settings.Secure.getString(
-                    getApplication<Application>().contentResolver,
-                    Settings.Secure.ANDROID_ID
-                ) ?: UUID.randomUUID().toString()
-
-                val result = repository.setStation(deviceId, code)
-                
-                if (result.first) {
-                    _uiState.update { it.copy(isLoading = false, isSuccess = true) }
-                    // Re-sync device info to reflect changes in the app
-                    repository.syncDeviceInfo(getApplication(), deviceId, null)
-                } else {
-                    _uiState.update { it.copy(isLoading = false, error = result.second ?: "Failed to verify station code") }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = "Error: ${e.message}") }
-            }
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                error = "To set your station code, use the Station option on the Home screen."
+            )
         }
     }
 }

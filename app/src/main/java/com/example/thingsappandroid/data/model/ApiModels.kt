@@ -32,12 +32,11 @@ data class RegisterDeviceRequest(
     @SerializedName("SerialNumber") val serialNumber: String
 )
 
+/** getdeviceinfo does not use latitude/longitude. */
 data class DeviceInfoRequest(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("StationCode") val stationCode: String? = null,
     @SerializedName("WiFiAddress") val wifiAddress: String? = null,
-    @SerializedName("Latitude") val latitude: Double = 0.0,
-    @SerializedName("Longitude") val longitude: Double = 0.0,
     @SerializedName("CurrentVersion") val currentVersion: String? = null
 )
 
@@ -108,22 +107,12 @@ data class AppConsumptionModel(
     val appId: String
 )
 
-data class VerifyDeviceRequestWrapper(
-    @SerializedName("VerifyDeviceRequestModel") val model: VerifyDeviceRequestModel
-)
-
-data class VerifyDeviceRequestModel(
-    val name: String,
-    val make: String,
-    val category: String,
-    val os: String,
-    val deviceId: String,
-    val appId: String,
-    val wiFiAddress: String,
-    val latitude: Double,
-    val longitude: Double,
-    val stationCode: String,
-    val serialNumber: String
+/** Flat body for setclimatestatus: {"deviceId","latitude","longitude","wiFiAddress"} — no wrapper. */
+data class SetClimateStatusRequest(
+    @SerializedName("deviceId") val deviceId: String,
+    @SerializedName("latitude") val latitude: Double,
+    @SerializedName("longitude") val longitude: Double,
+    @SerializedName("wiFiAddress") val wiFiAddress: String
 )
 
 data class GetGreenFiInfoRequest(@SerializedName("WiFiAddress") val wifiAddress: String)

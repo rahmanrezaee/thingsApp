@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,8 +18,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.data.model.StationInfo
-import com.example.thingsappandroid.ui.components.common.SocketIcon
-import com.example.thingsappandroid.ui.components.common.WifiBadgeIcon
 import com.example.thingsappandroid.ui.theme.*
 
 @Composable

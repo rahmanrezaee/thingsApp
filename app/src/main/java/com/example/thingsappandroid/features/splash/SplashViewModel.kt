@@ -78,7 +78,14 @@ class SplashViewModel @Inject constructor(
                 
                 // Still register device to ensure it's synced (with network check)
                 try {
-                    repository.syncDeviceInfo(getApplication(), deviceId, null)
+                    val deviceInfo = repository.syncDeviceInfo(getApplication(), deviceId, null)
+                    val hasStation = deviceInfo?.stationInfo != null
+                    preferenceManager.setHasStation(hasStation)
+                    if (hasStation) {
+                        getApplication<Application>().sendBroadcast(
+                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                        )
+                    }
                 } catch (e: Exception) {
                     Log.w("SplashViewModel", "Failed to sync device info: ${e.message}")
                     // Continue anyway - token is valid
@@ -91,12 +98,19 @@ class SplashViewModel @Inject constructor(
             // 2. No token - initialize device (register, get token, sync info)
             try {
                 Log.d("SplashViewModel", "Initializing device for deviceId: $deviceId")
-                val (success, token, _) = repository.initializeDevice(getApplication(), deviceId, null)
+                val (success, token, deviceInfo) = repository.initializeDevice(getApplication(), deviceId, null)
                 
                 if (success && token != null) {
                     Log.d("SplashViewModel", "✓ Device initialized successfully")
                     tokenManager.saveToken(token)
                     NetworkModule.setAuthToken(token)
+                    val hasStation = deviceInfo?.stationInfo != null
+                    preferenceManager.setHasStation(hasStation)
+                    if (hasStation) {
+                        getApplication<Application>().sendBroadcast(
+                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                        )
+                    }
                     _effect.send(SplashEffect.NavigateToHome)
                 } else {
                     Log.e("SplashViewModel", "Device initialization failed")

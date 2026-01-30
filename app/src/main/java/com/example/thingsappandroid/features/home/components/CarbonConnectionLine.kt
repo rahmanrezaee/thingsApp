@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.features.activity.components
+package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.components.common.Co2CloudIcon
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable

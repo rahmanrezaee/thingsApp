@@ -5,35 +5,37 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import com.example.thingsappandroid.features.activity.components.*
-import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
-import com.example.thingsappandroid.features.activity.viewModel.ActivityState
-import com.example.thingsappandroid.ui.components.AvoidedCO2EmissionsBottomSheet
-import com.example.thingsappandroid.ui.components.CurrentCarbonIntensityBottomSheet
-import com.example.thingsappandroid.ui.components.DeviceCarbonBatteryBottomSheet
-import com.example.thingsappandroid.ui.components.DeviceClimateStatusBottomSheet
-import com.example.thingsappandroid.ui.components.ElectricityBatteryBottomSheet
-import com.example.thingsappandroid.ui.components.ElectricityConsumptionBottomSheet
-import com.example.thingsappandroid.ui.components.GridCarbonIntensityBottomSheet
-import com.example.thingsappandroid.ui.components.StationBottomSheet
-import com.example.thingsappandroid.ui.theme.TextSecondary
+import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
+import com.example.thingsappandroid.features.home.viewModel.HomeState
+import com.example.thingsappandroid.features.home.components.BatteryCard
+import com.example.thingsappandroid.features.home.components.CarbonCard
+import com.example.thingsappandroid.features.home.components.CarbonConnectionLine
+import com.example.thingsappandroid.features.home.components.ChargingConnectionLine
+import com.example.thingsappandroid.features.home.components.ClimateStatusCard
+import com.example.thingsappandroid.features.home.components.GreenConnectorComponent
+import com.example.thingsappandroid.features.home.components.HomeTopBar
+import com.example.thingsappandroid.features.home.components.LinkedCardConnector
+import com.example.thingsappandroid.features.home.components.LowCarbonComponent
+import com.example.thingsappandroid.features.home.components.MetricsList
+import com.example.thingsappandroid.features.home.components.AvoidedCO2EmissionsBottomSheet
+import com.example.thingsappandroid.features.home.components.CurrentCarbonIntensityBottomSheet
+import com.example.thingsappandroid.features.home.components.DeviceCarbonBatteryBottomSheet
+import com.example.thingsappandroid.features.home.components.DeviceClimateStatusBottomSheet
+import com.example.thingsappandroid.features.home.components.ElectricityBatteryBottomSheet
+import com.example.thingsappandroid.features.home.components.ElectricityConsumptionBottomSheet
+import com.example.thingsappandroid.features.home.components.GridCarbonIntensityBottomSheet
+import com.example.thingsappandroid.features.home.components.StationBottomSheet
 import com.example.thingsappandroid.util.TimeUtility
 
 @Composable
 fun HomeScreen(
-    state: ActivityState,
-    onIntent: (com.example.thingsappandroid.features.activity.viewModel.ActivityIntent) -> Unit
+    state: HomeState,
+    onIntent: (ActivityIntent) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -117,22 +119,24 @@ fun HomeScreen(
                             // Calculate carbon battery values from deviceInfo
                             val remainingBudget = deviceInfo.remainingBudget ?: 0.0
                             val totalBudget = deviceInfo.totalBudget ?: 0.0
-                            
+
                             // Convert to grams: if value is 0-100, it's Kg (multiply by 1000), if 100-999 it's already grams
                             val remainingInGrams = if (remainingBudget in 0.0..100.0) {
                                 remainingBudget * 1000.0
                             } else {
                                 remainingBudget
                             }
-                            
+
                             val totalInGrams = if (totalBudget in 0.0..100.0) {
                                 totalBudget * 1000.0
                             } else {
                                 totalBudget
                             }
-                            
-                            Box(modifier = Modifier
-                                .zIndex(1f).clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
+
+                            Box(
+                                modifier = Modifier
+                                    .zIndex(1f)
+                                    .clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
                                 CarbonCard(
                                     currentUsage = remainingInGrams.toFloat(), // Remaining emissions budget in grams
                                     totalCapacity = totalInGrams.toFloat() // Total emissions budget in grams
@@ -144,14 +148,21 @@ fun HomeScreen(
                                     .zIndex(0f),
                                 contentAlignment = Alignment.TopCenter
                             ) {
-                                CarbonConnectionLine(height = 54.dp, isCharging = state.isCharging, isGreen = isGreen)
+                                CarbonConnectionLine(
+                                    height = 54.dp,
+                                    isCharging = state.isCharging,
+                                    isGreen = isGreen
+                                )
                             }
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-8).dp)
                                     .clickable { onIntent(ActivityIntent.OpenGridIntensitySheet) }
                             ) {
-                                LowCarbonComponent(intensity = state.carbonIntensity, isGreen = isGreen)
+                                LowCarbonComponent(
+                                    intensity = state.carbonIntensity,
+                                    isGreen = isGreen
+                                )
                             }
                         }
                     }

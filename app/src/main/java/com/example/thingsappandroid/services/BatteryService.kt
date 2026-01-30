@@ -20,19 +20,16 @@ import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
-import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.IconCompat
 import com.example.thingsappandroid.MainActivity
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.data.local.PreferenceManager
-import com.example.thingsappandroid.data.local.TokenManager
-import com.example.thingsappandroid.data.model.SetStationRequest
-import com.example.thingsappandroid.receivers.StationCodeReceiver
+import com.example.thingsappandroid.data.model.SetClimateStatusRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.util.BatteryUtil
+import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.DeviceUtils
-import com.example.thingsappandroid.util.TimeUtility
+import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
 import kotlinx.coroutines.CoroutineScope
@@ -44,12 +41,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.util.*
-import kotlin.math.roundToInt
 
-/**
- * Background service that monitors battery state and charging events.
- * Shows Device Climate Status (DCS) with appropriate icon and color.
- */
 class BatteryService : Service() {
 
     private val TAG = "BatteryService"
@@ -80,6 +72,10 @@ class BatteryService : Service() {
                     showStationCodeNotification()
                 }
             }
+            if (intent?.action == "com.example.thingsappandroid.HAS_STATION_UPDATED") {
+                Log.d(TAG, "Device has station from getDeviceInfo, cancelling Station Code notification")
+                notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
+            }
         }
     }
     
@@ -108,8 +104,11 @@ class BatteryService : Service() {
             // Create notification channel
             createNotificationChannel()
             
-            // Register receiver for station code updates
-            val filter = IntentFilter("com.example.thingsappandroid.STATION_CODE_UPDATED")
+            // Register receiver for station code updates and has-station updates
+            val filter = IntentFilter().apply {
+                addAction("com.example.thingsappandroid.STATION_CODE_UPDATED")
+                addAction("com.example.thingsappandroid.HAS_STATION_UPDATED")
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.registerReceiver(
                     this,
@@ -400,7 +399,7 @@ class BatteryService : Service() {
 
                     if (isCharging && !wasCharging && !isInitialization) {
                         handleChargingStarted()
-                        // Show "Enter Code" only when not in green status (no station code set)
+                        // Show Station Code notification only when device has no station from getDeviceInfo
                         if (currentStationCode.isNullOrBlank()) {
                             serviceScope.launch {
                                 delay(3000)
@@ -544,48 +543,16 @@ class BatteryService : Service() {
         serviceScope.launch {
             try {
                 delay(2000)
-                
                 val deviceId = DeviceUtils.getStoredDeviceId(applicationContext)
-                val stationCode = WifiUtils.getHashedWiFiBSSID(applicationContext)
-                WifiUtils.getWiFiSSID(applicationContext)
-                
-                val batteryIntent = applicationContext.registerReceiver(
-                    null,
-                    IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-                )
-                
-                var consumption: Double? = null
-                var voltage: Double? = null
-                var watt: Double? = null
-                
-                if (batteryIntent != null) {
-                    val voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
-                    if (voltageMv > 0) {
-                        voltage = voltageMv / 1000.0
-                    }
-                    
-                    val level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                    val scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                            status == BatteryManager.BATTERY_STATUS_FULL
-                    
-                    if (voltage != null && voltage > 0) {
-                        val estimatedCurrent = if (isCharging) 1.5 else 0.5
-                        watt = voltage * estimatedCurrent
-                        consumption = watt / 1000.0
-                    }
-                }
-
-                if (deviceId != null && stationCode != null) {
-                    sendStationInfo(deviceId, stationCode, consumption, voltage, watt)
-                }
+                val wiFiAddress = WifiUtils.getHashedWiFiBSSID(applicationContext)
+                // setStation is only called from StationBottomSheet (user action), not from background.
+                setClimateStatusOnChargingStart(deviceId, wiFiAddress)
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling charging event: ${e.message}", e)
                 Sentry.withScope { scope ->
                     scope.setTag("operation", "handleChargingEvent")
                     scope.setContexts("charging", mapOf(
-                        "device_id" to (deviceId ?: "null"),
+                        "device_id" to (DeviceUtils.getStoredDeviceId(applicationContext) ?: "null"),
                         "station_code" to (currentStationCode ?: "null")
                     ))
                     Sentry.captureException(e)
@@ -594,40 +561,39 @@ class BatteryService : Service() {
         }
     }
 
-    private suspend fun sendStationInfo(
-        deviceId: String,
-        stationCode: String,
-        consumption: Double?,
-        voltage: Double?,
-        watt: Double?
-    ) {
+    /** Calls POST /v4/thingsapp/setclimatestatus when charging starts. Requires token; sends flat body: deviceId, wiFiAddress, latitude, longitude. */
+    private suspend fun setClimateStatusOnChargingStart(deviceId: String?, wiFiAddress: String?) {
+        if (deviceId == null || wiFiAddress.isNullOrBlank()) {
+            Log.d(TAG, "setClimateStatus skipped: missing deviceId or wiFiAddress")
+            return
+        }
+        if (NetworkModule.getAuthToken().isNullOrBlank()) {
+            Log.d(TAG, "setClimateStatus skipped: no auth token")
+            return
+        }
         try {
-            val api = NetworkModule.api
-            val request = SetStationRequest(
+            val (latitude, longitude) = LocationUtils.getLocationCoordinates(applicationContext)
+                ?: Pair(0.0, 0.0)
+            val request = SetClimateStatusRequest(
                 deviceId = deviceId,
-                stationCode = stationCode,
-                consumption = consumption,
-                voltage = voltage,
-                watt = watt
+                latitude = latitude,
+                longitude = longitude,
+                wiFiAddress = wiFiAddress
             )
-
             val response = kotlinx.coroutines.withTimeoutOrNull(10000) {
-                api.setStation(request)
+                NetworkModule.api.setClimateStatus(request)
             }
-
             if (response?.isSuccessful == true) {
-                Log.d(TAG, "Successfully set station info for device $deviceId")
+                response.body()?.data?.let { data ->
+                    Log.d(TAG, "setClimateStatus success: isGreen=${data.isGreen}, climateStatus=${data.climateStatus}")
+                } ?: Log.d(TAG, "setClimateStatus success")
             } else {
-                Log.w(TAG, "Failed to set station info. Status: ${response?.code() ?: "timeout"}")
+                Log.w(TAG, "setClimateStatus failed: ${response?.code() ?: "timeout"}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Station info error: ${e.javaClass.simpleName}")
+            Log.e(TAG, "setClimateStatus error: ${e.message}", e)
             Sentry.withScope { scope ->
-                scope.setTag("operation", "sendStationInfo")
-                scope.setContexts("station", mapOf(
-                    "device_id" to deviceId,
-                    "station_code" to stationCode
-                ))
+                scope.setTag("operation", "setClimateStatus")
                 Sentry.captureException(e)
             }
         }
@@ -663,12 +629,32 @@ class BatteryService : Service() {
             }
 
             try {
-                val dcsInfo = getDeviceClimateStatusInfo()
+                val prefs = PreferenceManager(applicationContext)
+                val apiClimateStatus = prefs.getClimateStatus()
+
+                val (title, colorInt, iconRes) = if (apiClimateStatus != null) {
+                    val data = ClimateUtils.getMappedClimateData(apiClimateStatus)
+                    val color = when (apiClimateStatus) {
+                        8 -> 0xFFFF9800.toInt()      // Align - orange
+                        5, 6, 7, 9 -> 0xFF4CAF50.toInt() // Green
+                        else -> 0xFF9E9E9E.toInt()   // Not green - gray
+                    }
+                    val icon = try {
+                        resources.getDrawable(R.drawable.ic_power, null)
+                        R.drawable.ic_power
+                    } catch (e: Exception) {
+                        android.R.drawable.ic_dialog_info
+                    }
+                    Triple(data.title, color, icon)
+                } else {
+                    val dcsInfo = getDeviceClimateStatusInfo()
+                    Triple(dcsInfo.title, dcsInfo.color, dcsInfo.iconRes)
+                }
 
                 val updatedNotificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(dcsInfo.iconRes)
-                    .setColor(dcsInfo.color)
-                    .setContentTitle(dcsInfo.title)
+                    .setSmallIcon(iconRes)
+                    .setColor(colorInt)
+                    .setContentTitle(title)
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
@@ -722,6 +708,11 @@ class BatteryService : Service() {
     }
     
     private fun showStationCodeNotification() {
+        // Only show when device has no station from getDeviceInfo (StationInfo). If already connected, skip.
+        if (sharedPreferences.getBoolean("has_station", false)) {
+            Log.d(TAG, "Station Code notification skipped: device already has station from getDeviceInfo")
+            return
+        }
         val stationCode = currentStationCode
 
         val intentMain = Intent(this, MainActivity::class.java).apply {

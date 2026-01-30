@@ -32,9 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.thingsappandroid.BuildConfig
-import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
+import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.ui.components.BackButtonTopBar
-import com.example.thingsappandroid.ui.components.ProfileListItem
+import com.example.thingsappandroid.features.profile.components.ProfileListItem
 import com.example.thingsappandroid.ui.theme.Gray100
 import com.example.thingsappandroid.ui.theme.Gray500
 import com.example.thingsappandroid.ui.theme.Shapes
@@ -47,7 +47,7 @@ private const val TERMS_URL = "https://example.com/terms"
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
-    activityViewModel: ActivityViewModel = viewModel(
+    activityViewModel: HomeViewModel = viewModel(
         viewModelStoreOwner = LocalContext.current as ComponentActivity
     )
 ) {

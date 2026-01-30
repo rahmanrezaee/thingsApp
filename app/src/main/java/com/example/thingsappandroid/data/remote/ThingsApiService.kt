@@ -40,7 +40,7 @@ interface ThingsApiService {
     suspend fun getClimateStatus(@Body request: GetClimateStatusRequest): Response<ClimateStatusResponse>
 
     @POST("/v4/thingsapp/setclimatestatus")
-    suspend fun setClimateStatus(@Body request: VerifyDeviceRequestWrapper): Response<SetClimateStatusResponse>
+    suspend fun setClimateStatus(@Body request: SetClimateStatusRequest): Response<SetClimateStatusResponse>
 
     // --- Green Info & Intensity ---
 

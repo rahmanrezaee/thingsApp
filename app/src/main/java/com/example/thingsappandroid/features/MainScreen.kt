@@ -15,21 +15,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.thingsappandroid.features.activity.components.HomeBottomBar
-import com.example.thingsappandroid.features.activity.screens.ActivityScreen
+import com.example.thingsappandroid.features.home.components.HomeBottomBar
 import com.example.thingsappandroid.features.home.screens.HomeScreen
 import com.example.thingsappandroid.features.profile.screens.ProfileScreen
-import com.example.thingsappandroid.features.shop.screens.ShopScreen
-import com.example.thingsappandroid.features.activity.viewModel.ActivityEffect
-import com.example.thingsappandroid.features.activity.viewModel.ActivityIntent
-import com.example.thingsappandroid.features.activity.viewModel.ActivityViewModel
+import com.example.thingsappandroid.features.home.viewModel.ActivityEffect
+import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
+import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.navigation.Screen
-import com.example.thingsappandroid.ui.components.StationCodeBottomSheet
+import com.example.thingsappandroid.features.home.components.StationCodeBottomSheet
 
 @Composable
 fun MainScreen(
     navController: NavController,
-    homeViewModel: ActivityViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
+    homeViewModel: HomeViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
     val state by homeViewModel.state.collectAsState()
     val currentTab = state.selectedBottomTabIndex

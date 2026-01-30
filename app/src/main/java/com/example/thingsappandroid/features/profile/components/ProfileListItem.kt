@@ -1,4 +1,4 @@
-package com.example.thingsappandroid.ui.components
+package com.example.thingsappandroid.features.profile.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
