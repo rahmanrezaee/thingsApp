@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.RemoteInput
-import com.example.thingsappandroid.data.local.PreferenceManager
+import com.example.thingsappandroid.services.BatteryServiceActions
 
 class StationCodeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -18,7 +18,7 @@ class StationCodeReceiver : BroadcastReceiver() {
                 Log.d("StationCodeReceiver", "Received station code from notification: $stationCode")
                 
                 // Send broadcast to notify BatteryService to update immediately with the code
-                val updateIntent = Intent("com.example.thingsappandroid.STATION_CODE_UPDATED").apply {
+                val updateIntent = Intent(BatteryServiceActions.HAS_STATION_UPDATED).apply {
                     putExtra("station_code", stationCode.trim())
                 }
                 context.sendBroadcast(updateIntent)

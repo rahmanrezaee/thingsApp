@@ -6,8 +6,8 @@ import android.util.Log
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.model.SetClimateStatusRequest
-import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
@@ -26,10 +26,13 @@ class ClimateStatusManager(private val context: Context) {
     
     /**
      * Handle charging started event
-     * 
+     *
+     * @param onLocationError Callback when location is unavailable – invoked with (reason, details, isPermissionDenied, isServicesDisabled)
      * @return Climate status if successful, null otherwise
      */
-    suspend fun handleChargingStarted(): Int? {
+    suspend fun handleChargingStarted(
+        onLocationError: ((reason: String, details: String, isPermissionDenied: Boolean, isServicesDisabled: Boolean) -> Unit)? = null
+    ): Int? {
         return try {
             delay(2000) // Wait for system to stabilize
             
@@ -80,15 +83,12 @@ class ClimateStatusManager(private val context: Context) {
                 }
                 
                 Log.w(TAG, "⚠️ Location not available: $errorReason")
-                
-                // Broadcast location error to BatteryService to show notification
-                val locationErrorIntent = Intent(BatteryServiceActions.LOCATION_ERROR).apply {
-                    putExtra("error_reason", errorReason)
-                    putExtra("error_details", errorDetails)
-                    putExtra("is_permission_denied", !hasLocationPermission)
-                    putExtra("is_services_disabled", !isLocationEnabled)
-                }
-                context.sendBroadcast(locationErrorIntent)
+                onLocationError?.invoke(
+                    errorReason,
+                    errorDetails,
+                    !hasLocationPermission,
+                    !isLocationEnabled
+                )
                 return null
             }
             
@@ -191,19 +191,18 @@ class ClimateStatusManager(private val context: Context) {
                 response.body()?.data?.let { deviceInfo ->
                     Log.d(TAG, "getDeviceInfo success")
                     
-                    // Save to PreferenceManager
+                    // Save to PreferenceManager (local + backend)
                     val prefManager = PreferenceManager(context)
                     prefManager.saveDeviceInfo(deviceInfo)
                     
-                    // Save station info if available
-                    deviceInfo.stationInfo?.let { stationInfo ->
-                        prefManager.saveStationInfo(stationInfo)
-                        prefManager.saveStationCode(stationInfo.stationCode)
-                        
-                        // Broadcast that device has station
-                        val intent = Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                        context.sendBroadcast(intent)
+                    val hasStation = deviceInfo.stationInfo != null
+                    prefManager.setHasStation(hasStation)
+                    if (deviceInfo.stationInfo != null) {
+                        prefManager.saveStationInfo(deviceInfo.stationInfo)
+                        prefManager.saveStationCode(deviceInfo.stationInfo!!.stationCode)
                     }
+                    
+                    context.sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
                 }
             } else {
                 Log.w(TAG, "getDeviceInfo failed: ${response?.code() ?: "timeout"}")

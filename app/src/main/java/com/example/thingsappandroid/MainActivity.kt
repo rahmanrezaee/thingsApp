@@ -25,6 +25,7 @@ import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.navigation.AppNavigation
 import com.example.thingsappandroid.services.BatteryService
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.ui.components.GlobalMessageHost
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -352,7 +353,7 @@ class MainActivity : ComponentActivity() {
             "Checking intent: Action=${intent?.action}, Extras=${intent?.extras?.keySet()}"
         )
 
-        if (intent?.action == "com.example.thingsappandroid.OPEN_STATION_CODE" ||
+        if (intent?.action == BatteryServiceActions.OPEN_STATION_CODE ||
             intent?.getBooleanExtra("open_station_code_dialog", false) == true
         ) {
 

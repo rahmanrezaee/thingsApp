@@ -7,6 +7,7 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.model.SetClimateStatusRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
@@ -199,15 +200,11 @@ class StationCodeHandler(private val context: Context) {
                     // Store in PreferenceManager (local storage)
                     val prefManager = PreferenceManager(context)
                     prefManager.saveDeviceInfo(deviceInfo)
+                    prefManager.setHasStation(deviceInfo.stationInfo != null)
+                    deviceInfo.stationInfo?.let { Log.d(TAG, "💾 Stored station info: ${it.stationName}") }
                     
-                    // Store station info
-                    deviceInfo.stationInfo?.let { stationInfo ->
-                        prefManager.saveStationInfo(stationInfo)
-                        Log.d(TAG, "💾 Stored station info: ${stationInfo.stationName}")
-                    }
-                    
-                    // Broadcast success to update UI
-                    val successIntent = Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                    // Broadcast after save – BatteryService checks Preference has_station
+                    val successIntent = Intent(BatteryServiceActions.HAS_STATION_UPDATED)
                     context.sendBroadcast(successIntent)
                 }
             } else {

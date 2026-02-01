@@ -3,6 +3,7 @@ package com.example.thingsappandroid.features.splash
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.location.LocationManager
 import android.provider.Settings
 import android.util.Log
@@ -12,6 +13,7 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -78,11 +80,7 @@ class SplashViewModel @Inject constructor(
                 }
                 val hasStation = lastDeviceInfo?.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
-                if (hasStation) {
-                    getApplication<Application>().sendBroadcast(
-                        android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                    )
-                }
+                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
                 tryNavigateToHomeOrRequestLocation()
                 return@launch
             }
@@ -99,11 +97,7 @@ class SplashViewModel @Inject constructor(
                     deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
                     val hasStation = deviceInfo?.stationInfo != null
                     preferenceManager.setHasStation(hasStation)
-                    if (hasStation) {
-                        getApplication<Application>().sendBroadcast(
-                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                        )
-                    }
+                    getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
                     tryNavigateToHomeOrRequestLocation()
                 } else {
                     Log.e("SplashViewModel", "Device initialization failed")

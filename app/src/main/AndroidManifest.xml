@@ -96,39 +96,8 @@
             android:enabled="true"
             android:exported="false" />
 
-        <receiver
-            android:name=".receivers.BatteryChangeReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BATTERY_CHANGED" />
-                <action android:name="android.intent.action.POWER_CONNECTED" />
-                <action android:name="android.intent.action.POWER_DISCONNECTED" />
-            </intent-filter>
-        </receiver>
 
-        <receiver
-            android:name=".receivers.WiFiChangeReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
-                <action android:name="android.net.wifi.STATE_CHANGE" />
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".receivers.LocationChangeReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.location.PROVIDERS_CHANGED" />
-                <action android:name="android.location.MODE_CHANGED" />
-            </intent-filter>
-        </receiver>
-    
-    <!-- Required: set your sentry.io project identifier (DSN) -->
+        <!-- Required: set your sentry.io project identifier (DSN) -->
     <meta-data android:name="io.sentry.dsn" android:value="https://a997e0dd8a9a495ae5a74755cc762050@o4507145257025536.ingest.de.sentry.io/4510749854400592" />
     <!-- Add data like request headers, user ip address and device name, see https://docs.sentry.io/platforms/android/data-management/data-collected/ for more info -->
     <meta-data android:name="io.sentry.send-default-pii" android:value="true" />

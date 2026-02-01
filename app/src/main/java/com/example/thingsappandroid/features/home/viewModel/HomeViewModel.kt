@@ -21,6 +21,7 @@ import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.util.BatteryUtil
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.WifiUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -392,11 +393,7 @@ class HomeViewModel @Inject constructor(
 
                 val hasStation = deviceInfo.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
-                if (hasStation) {
-                    getApplication<Application>().sendBroadcast(
-                        android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                    )
-                }
+                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -502,12 +499,7 @@ class HomeViewModel @Inject constructor(
 
                     val hasStation = deviceInfo.stationInfo != null
                     preferenceManager.setHasStation(hasStation)
-                    if (hasStation) {
-                        getApplication<Application>().sendBroadcast(
-                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                        )
-                    }
-                    
+                    getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
                     _state.update {
                         it.copy(
                             isLoading = false,
