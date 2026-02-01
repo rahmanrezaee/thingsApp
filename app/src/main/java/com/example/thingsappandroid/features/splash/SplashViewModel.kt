@@ -2,6 +2,8 @@ package com.example.thingsappandroid.features.splash
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Context
+import android.location.LocationManager
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -21,8 +23,8 @@ import javax.inject.Inject
 
 sealed class SplashEffect {
     object NavigateToHome : SplashEffect()
-    object NavigateToOnboarding : SplashEffect()
     data class ShowError(val message: String) : SplashEffect()
+    object RequestEnableLocation : SplashEffect()
 }
 
 @HiltViewModel
@@ -36,22 +38,21 @@ class SplashViewModel @Inject constructor(
     private val _effect = Channel<SplashEffect>()
     val effect = _effect.receiveAsFlow()
 
-    init {
+    private var appStartCheckStarted = false
+
+    /** Call when permissions are granted to run auth/location check. Only runs once. */
+    fun runAppStartCheckIfNeeded() {
+        if (appStartCheckStarted) return
+        appStartCheckStarted = true
         checkAppStart()
     }
 
     @SuppressLint("HardwareIds")
     private fun checkAppStart() {
         viewModelScope.launch {
-            // Artificial delay for branding (optional, remove if speed is critical)
             delay(1000)
 
-            if (!preferenceManager.isOnboardingCompleted()) {
-                _effect.send(SplashEffect.NavigateToOnboarding)
-                return@launch
-            }
-
-            // Get Device ID
+            // Get Device ID (onboarding already completed before reaching splash)
             val deviceId = Settings.Secure.getString(
                 getApplication<Application>().contentResolver,
                 Settings.Secure.ANDROID_ID
@@ -60,7 +61,7 @@ class SplashViewModel @Inject constructor(
             // Check network connectivity first
             if (!NetworkUtils.isNetworkAvailable(getApplication())) {
                 Log.w("SplashViewModel", "No network connection available - will use last saved device info if any")
-                _effect.send(SplashEffect.NavigateToHome)
+                tryNavigateToHomeOrRequestLocation()
                 return@launch
             }
 
@@ -68,14 +69,13 @@ class SplashViewModel @Inject constructor(
             // 1. Check Local Token First
             val cachedToken = tokenManager.getToken()
             if (!cachedToken.isNullOrEmpty()) {
-                // Token exists, use it
                 Log.d("SplashViewModel", "Using cached token")
                 Log.d("SplashViewModel", "deviceId: $deviceId")
                 NetworkModule.setAuthToken(cachedToken)
-                
-                // Don't sync here - let HomeViewModel handle it on init to avoid duplicate calls
-                // Just check if we have station info from last saved data
-                val lastDeviceInfo = repository.getLastDeviceInfo()
+                var lastDeviceInfo = repository.getLastDeviceInfo()
+                if (lastDeviceInfo == null) {
+                    lastDeviceInfo = repository.syncDeviceInfo(getApplication(), deviceId, null)
+                }
                 val hasStation = lastDeviceInfo?.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
                 if (hasStation) {
@@ -83,8 +83,7 @@ class SplashViewModel @Inject constructor(
                         android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
                     )
                 }
-                
-                _effect.send(SplashEffect.NavigateToHome)
+                tryNavigateToHomeOrRequestLocation()
                 return@launch
             }
             
@@ -97,6 +96,7 @@ class SplashViewModel @Inject constructor(
                     Log.d("SplashViewModel", "✓ Device initialized successfully")
                     tokenManager.saveToken(token)
                     NetworkModule.setAuthToken(token)
+                    deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
                     val hasStation = deviceInfo?.stationInfo != null
                     preferenceManager.setHasStation(hasStation)
                     if (hasStation) {
@@ -104,12 +104,12 @@ class SplashViewModel @Inject constructor(
                             android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
                         )
                     }
-                    _effect.send(SplashEffect.NavigateToHome)
+                    tryNavigateToHomeOrRequestLocation()
                 } else {
                     Log.e("SplashViewModel", "Device initialization failed")
                     _effect.send(SplashEffect.ShowError("Failed to authenticate. Please check your internet connection and try again."))
                     delay(2000)
-                    _effect.send(SplashEffect.NavigateToHome)
+                    tryNavigateToHomeOrRequestLocation()
                 }
             } catch (e: Exception) {
                 Log.e("SplashViewModel", "Error during initialization: ${e.message}", e)
@@ -124,8 +124,34 @@ class SplashViewModel @Inject constructor(
                 }
                 _effect.send(SplashEffect.ShowError(errorMessage))
                 delay(2000)
-                _effect.send(SplashEffect.NavigateToHome)
+                tryNavigateToHomeOrRequestLocation()
             }
+        }
+    }
+
+    private fun isLocationEnabled(): Boolean {
+        val locationManager = getApplication<Application>().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    /** If location is off and user hasn't skipped, send RequestEnableLocation; otherwise NavigateToHome. */
+    private suspend fun tryNavigateToHomeOrRequestLocation() {
+        if (isLocationEnabled()) {
+            _effect.send(SplashEffect.NavigateToHome)
+            return
+        }
+        if (preferenceManager.getLocationRequestSkipped()) {
+            _effect.send(SplashEffect.NavigateToHome)
+            return
+        }
+        _effect.send(SplashEffect.RequestEnableLocation)
+    }
+
+    fun skipLocationAndNavigateHome() {
+        preferenceManager.setLocationRequestSkipped(true)
+        viewModelScope.launch {
+            _effect.send(SplashEffect.NavigateToHome)
         }
     }
 }

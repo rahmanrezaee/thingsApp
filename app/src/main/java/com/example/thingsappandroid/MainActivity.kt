@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import androidx.navigation.compose.rememberNavController
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
@@ -92,6 +91,13 @@ class MainActivity : ComponentActivity() {
         } else {
             Toast.makeText(this, "Both Location and Notification permissions are required.", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** Called from composable when user grants permissions (e.g. from SplashScreen). */
+    fun onPermissionsGranted() {
+        hasRequiredPermissions = true
+        Toast.makeText(this, "All permissions granted.", Toast.LENGTH_SHORT).show()
+        startChargingDetectionService()
     }
 
     /** Request both location and notification permissions. */
@@ -308,16 +314,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ThingsAppAndroidTheme {
-                val navController = rememberNavController()
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation(
-                        navController = navController,
-                        onOnboardingFinished = { preferenceManager.setOnboardingCompleted(true) },
-                        onRequestPermissions = { checkAndRequestPermissions() },
-                        hasRequiredPermissions = hasRequiredPermissions,
-                        initialIntent = intent
-                    )
-
+                    AppNavigation()
                     GlobalMessageHost()
                 }
             }

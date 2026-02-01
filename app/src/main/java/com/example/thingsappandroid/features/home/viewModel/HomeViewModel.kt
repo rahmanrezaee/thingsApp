@@ -202,12 +202,11 @@ class HomeViewModel @Inject constructor(
     
     /**
      * Checks if location is enabled before loading device info.
-     * If not enabled, shows dialog and waits for user to enable it.
-     * If user previously skipped, loads cached data without showing dialog.
+     * Location dialog is shown on SplashScreen; here we only load cached if skipped or location off.
      */
     private fun checkLocationAndLoadDeviceInfo() {
         val locationEnabled = isLocationEnabled()
-        val skipped = _state.value.locationRequestSkipped
+        val skipped = _state.value.locationRequestSkipped || preferenceManager.getLocationRequestSkipped()
 
         if (locationEnabled) {
             // Location is enabled - proceed with fresh data load
@@ -216,14 +215,14 @@ class HomeViewModel @Inject constructor(
                     isLocationEnabled = true,
                     showLocationEnableDialog = false,
                     pendingDeviceInfoLoad = false
-                ) 
+                )
             }
             viewModelScope.launch {
                 loadDeviceInfoWithRetry()
             }
-        } else if (skipped) {
-            // User previously skipped - load cached data only, don't ask again
-            Log.d("ActivityViewModel", "Location disabled but user skipped request - loading cached data")
+        } else {
+            // Location disabled - show cached if any, else try API once (first-time load)
+            Log.d("ActivityViewModel", "Location disabled - loading cached or fetching once")
             viewModelScope.launch {
                 val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
                 if (cachedDeviceInfo != null) {
@@ -242,29 +241,14 @@ class HomeViewModel @Inject constructor(
                             isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
                             climateData = mappedClimate,
                             isLoading = false,
-                            error = null
+                            error = null,
+                            locationRequestSkipped = true
                         )
                     }
-        } else {
-            _state.update { 
-                it.copy(
-                            isLoading = false,
-                            error = "No cached data available. Enable location to load device info."
-                        )
-                    }
+                } else {
+                    _state.update { it.copy(locationRequestSkipped = true) }
+                    loadDeviceInfoWithRetry()
                 }
-            }
-        } else {
-            // Location disabled and not skipped - show dialog
-            _state.update {
-                it.copy(
-                    isLocationEnabled = false,
-                    showLocationEnableDialog = true,
-                    pendingDeviceInfoLoad = true
-                ) 
-            }
-            viewModelScope.launch {
-                _effect.send(ActivityEffect.RequestEnableLocation)
             }
         }
     }
@@ -642,8 +626,13 @@ class HomeViewModel @Inject constructor(
         // Start periodic battery updates every 1 second
         startPeriodicBatteryUpdates()
 
-        // Set Device Name
-        _state.update { it.copy(deviceName = Build.MODEL) }
+        // Set Device Name and sync location-skipped from preferences (set on SplashScreen)
+        _state.update {
+            it.copy(
+                deviceName = Build.MODEL,
+                locationRequestSkipped = preferenceManager.getLocationRequestSkipped()
+            )
+        }
         
         // Get battery capacity in mWh - moved to background thread to avoid blocking main thread
         viewModelScope.launch(Dispatchers.IO) {

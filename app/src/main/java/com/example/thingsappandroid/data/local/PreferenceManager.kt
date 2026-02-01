@@ -119,4 +119,13 @@ class PreferenceManager(context: Context) {
         val v = sharedPreferences.getInt("carbon_intensity", -1)
         return if (v < 0) null else v
     }
+
+    /** True if user skipped the "turn on location" request on splash. */
+    fun getLocationRequestSkipped(): Boolean {
+        return sharedPreferences.getBoolean("location_request_skipped", false)
+    }
+
+    fun setLocationRequestSkipped(skipped: Boolean) {
+        sharedPreferences.edit().putBoolean("location_request_skipped", skipped).apply()
+    }
 }
