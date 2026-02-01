@@ -78,4 +78,27 @@ object LocationUtils {
             null
         }
     }
+
+    /**
+     * Checks if location services (GPS or Network provider) are enabled.
+     * This is different from having permission - the user can have permission
+     * but still have location services turned off.
+     * 
+     * @param context The application context
+     * @return true if either GPS or Network provider is enabled
+     */
+    fun isLocationEnabled(context: Context): Boolean {
+        return try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            
+            Log.d(TAG, "Location services - GPS: $isGpsEnabled, Network: $isNetworkEnabled")
+            
+            isGpsEnabled || isNetworkEnabled
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking location services: ${e.message}")
+            false
+        }
+    }
 }

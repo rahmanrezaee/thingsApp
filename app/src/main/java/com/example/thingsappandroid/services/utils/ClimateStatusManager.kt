@@ -41,8 +41,12 @@ class ClimateStatusManager(private val context: Context) {
                 delayMs = 1500L
             )
             
+            // Check location services status first
+            val hasLocationPermission = LocationUtils.hasLocationPermission(context)
+            val isLocationEnabled = LocationUtils.isLocationEnabled(context)
+            
             val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
-            val hasLocation = latitude != 0.0 || longitude != 0.0
+            val hasValidLocation = latitude != 0.0 || longitude != 0.0
             
             // Validate availability
             if (!wifiResult.success) {
@@ -59,8 +63,31 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
             
-            if (!hasLocation) {
-                Log.w(TAG, "⚠️ Location not available")
+            // Check location availability and broadcast specific error
+            if (!hasLocationPermission || !isLocationEnabled || !hasValidLocation) {
+                val errorReason = when {
+                    !hasLocationPermission -> "Location permission denied"
+                    !isLocationEnabled -> "Location services disabled"
+                    !hasValidLocation -> "Unable to get location coordinates"
+                    else -> "Location not available"
+                }
+                val errorDetails = when {
+                    !hasLocationPermission -> "Please grant location permission in app settings to enable carbon tracking."
+                    !isLocationEnabled -> "Please enable location services (GPS) in your device settings. Location is required for WiFi identification and carbon tracking."
+                    !hasValidLocation -> "Unable to retrieve your current location. Please check your GPS signal."
+                    else -> "Location services are not available."
+                }
+                
+                Log.w(TAG, "⚠️ Location not available: $errorReason")
+                
+                // Broadcast location error to BatteryService to show notification
+                val locationErrorIntent = Intent("com.example.thingsappandroid.LOCATION_ERROR").apply {
+                    putExtra("error_reason", errorReason)
+                    putExtra("error_details", errorDetails)
+                    putExtra("is_permission_denied", !hasLocationPermission)
+                    putExtra("is_services_disabled", !isLocationEnabled)
+                }
+                context.sendBroadcast(locationErrorIntent)
                 return null
             }
             

@@ -1,5 +1,6 @@
 package com.example.thingsappandroid.services
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.BroadcastReceiver
@@ -7,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -66,6 +69,9 @@ class BatteryService : Service() {
     private lateinit var contentIntent: PendingIntent
     private var intervalRate: Int = 1 // seconds - update every second
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Dynamic broadcast receiver for system battery events (required for Android 8.0+)
+    private var batteryChangeReceiver: BroadcastReceiver? = null
 
     private var chargeState: BatteryState? = null
     private var groupId: String? = null
@@ -136,7 +142,7 @@ class BatteryService : Service() {
                             "Battery State Change - was=$wasCharging, is=$isCharging, init=$isInitialization"
                         )
 
-                        // Charging stopped
+                        // Charging stopped — do not show location notification on disconnect
                         if (!isCharging && wasCharging) {
                             notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
                             sendBackgroundData()
@@ -146,14 +152,12 @@ class BatteryService : Service() {
                                     consumptionTracker.stopTracking(level, voltage)
                                 }
                             }
-                            // Show full-screen notification with WiFi and Location status
-                            showChargingStoppedNotification()
                         }
 
                         // Charging started (transition from not charging to charging)
                         if (isCharging && !wasCharging && !isInitialization) {
                             serviceScope.launch {
-                                val climateStatus = handleChargingStarted()
+                                val climateStatus: Int? = handleChargingStarted()
                                 if (climateStatus != null && climateStatus !in listOf(5, 6, 7, 9)) {
                                     delay(3000)
                                     showStationCodeNotification()
@@ -257,6 +261,20 @@ class BatteryService : Service() {
                     }
                 }
 
+                "com.example.thingsappandroid.LOCATION_ERROR" -> {
+                    val errorReason = intent.getStringExtra("error_reason")
+                    val errorDetails = intent.getStringExtra("error_details")
+                    val isPermissionDenied = intent.getBooleanExtra("is_permission_denied", false)
+                    val isServicesDisabled = intent.getBooleanExtra("is_services_disabled", false)
+                    
+                    Log.w(TAG, "⚠️ Location error received: $errorReason")
+                    
+                    // Show notification only if charging - user needs to enable location
+                    if (chargeState?.isCharging == true) {
+                        showLocationErrorNotification(errorReason, errorDetails, isPermissionDenied, isServicesDisabled)
+                    }
+                }
+
                 "com.example.thingsappandroid.MANUAL_SYNC_REQUESTED" -> {
                     Log.d(TAG, "Manual sync requested from UI")
                     serviceScope.launch {
@@ -347,6 +365,7 @@ class BatteryService : Service() {
                 addAction("com.example.thingsappandroid.BATTERY_CHANGED")
                 addAction("com.example.thingsappandroid.WIFI_CHANGED")
                 addAction("com.example.thingsappandroid.LOCATION_CHANGED")
+                addAction("com.example.thingsappandroid.LOCATION_ERROR")
                 addAction("com.example.thingsappandroid.MANUAL_SYNC_REQUESTED")
                 addAction("com.example.thingsappandroid.BATTERY_STATE_REQUEST")
             }
@@ -362,6 +381,26 @@ class BatteryService : Service() {
             }
 
             Log.d(TAG, "Internal broadcast receiver registered for all events")
+
+            // Register battery change receiver dynamically (required for Android 8.0+)
+            // Manifest-registered receivers for ACTION_BATTERY_CHANGED don't work on API 26+
+            batteryChangeReceiver = com.example.thingsappandroid.receivers.BatteryChangeReceiver()
+            val batteryFilter = IntentFilter().apply {
+                addAction(Intent.ACTION_BATTERY_CHANGED)
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.registerReceiver(
+                    this,
+                    batteryChangeReceiver,
+                    batteryFilter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+            } else {
+                registerReceiver(batteryChangeReceiver, batteryFilter)
+            }
+            Log.d(TAG, "BatteryChangeReceiver registered dynamically for system battery events")
 
             // NEW: Fetch initial battery state immediately so we don't wait for a broadcast
             fetchInitialBatteryState()
@@ -545,6 +584,22 @@ class BatteryService : Service() {
                 }
                 notificationManager.createNotificationChannel(batteryChannel)
                 Log.d(TAG, "Notification channel created: $CHANNEL_ID")
+
+
+                val locationPermissionChannel = NotificationChannel(
+                    LOCATION_PERMISSION_CHANNEL_ID,
+                    "Location Permission",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Notifies when location permission is needed to verify charging station"
+                    setShowBadge(true)
+                    enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
+                notificationManager.createNotificationChannel(locationPermissionChannel)
+
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error creating notification channel: ${e.message}", e)
             }
@@ -817,43 +872,149 @@ class BatteryService : Service() {
 
     @RequiresApi(Build.VERSION_CODES.R)
     private suspend fun handleChargingStarted(): Int? {
-        return try {
-            val deviceId = DeviceUtils.getStoredDeviceId(applicationContext)
-            val (latitude, longitude) = LocationUtils.getLocationCoordinates(applicationContext)
-                ?: Pair(0.0, 0.0)
+        try {
+            // Step 1: Require both location permission AND location services (GPS) to be ON
+            val hasLocationPermission = LocationUtils.hasLocationPermission(applicationContext)
+            val isLocationServicesOn = LocationUtils.isLocationEnabled(applicationContext)
+            val hasLocation = hasLocationPermission && isLocationServicesOn
 
-            // Use ClimateStatusManager to handle charging
-            val climateStatus = climateStatusManager.handleChargingStarted()
-
-            // Check WiFi address changes
-            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(
-                applicationContext,
-                maxRetries = 2,
-                delayMs = 1000L
-            )
-            if (wifiResult.success && wifiResult.bssid != null) {
-                if (wifiAddressMonitor.hasWifiChanged(wifiResult.bssid)) {
-                    Log.i(TAG, "📡 WiFi Address Changed during charging start!")
-                    wifiAddressMonitor.handleWifiAddressChange(
-                        deviceId,
-                        wifiResult.bssid,
-                        latitude,
-                        longitude,
-                        isCharging = true
-                    )
+            if (!hasLocation) {
+                val reason = when {
+                    !hasLocationPermission -> "permission not granted"
+                    !isLocationServicesOn -> "location services (GPS) are off"
+                    else -> "unknown"
                 }
-                wifiAddressMonitor.updateLastKnownAddress(wifiResult.bssid)
+                Log.w(TAG, "Location not fully available ($reason) — showing notification that opens automatically when charging starts")
+                // Show notification with full-screen intent so UI opens immediately (no click)
+                showLocationRequiredNotificationOnConnect()
+                val ready = waitForLocationPermissionAndServices(timeoutMs = 30_000)
+                if (ready) {
+                    notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+                } else {
+                    Log.w(TAG, "Location still not available after timeout — proceeding without WiFi station")
+                    sendStationInfoWithoutWifi()
+                    return currentDCS.ordinal
+                }
             }
 
-            climateStatus
+            // Step 2: Location granted — now check WiFi availability
+            val deviceId = DeviceUtils.getStoredDeviceId(applicationContext)
+            val wifiSSID = WifiUtils.getHashedWiFiBSSID(applicationContext)
+
+            if (wifiSSID.isNullOrBlank() ) {
+                Log.w(TAG, "WiFi not available or SSID/BSSID empty — sending without station code")
+                sendStationInfoWithoutWifi()
+                return currentDCS.ordinal
+            }
+
+            Log.d(TAG, "WiFi available — SSID: $wifiSSID")
+
+            // Step 3: Gather battery data
+            val batteryIntent = applicationContext.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            )
+
+            var consumption: Double? = null
+            var voltage: Double? = null
+            var watt: Double? = null
+
+            if (batteryIntent != null) {
+                val voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+                if (voltageMv > 0) {
+                    voltage = voltageMv / 1000.0
+                }
+
+                val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL
+
+                if (voltage != null && voltage > 0) {
+                    val estimatedCurrent = if (isCharging) 1.5 else 0.5
+                    watt = voltage * estimatedCurrent
+                    consumption = watt / 1000.0
+                }
+            }
+
+//            // Step 4: Send station info
+//            if (deviceId != null) {
+//                sendStationInfo(deviceId, stationCode, consumption, voltage, watt)
+//            }
+
+            // Step 5: Update DCS now that we have WiFi + station confirmed
+            // This ensures EXCELLENT is set before we return
+            chargeState?.let { updateDeviceClimateStatus(it) }
+
+            return currentDCS.ordinal
+
         } catch (e: Exception) {
             Log.e(TAG, "Error handling charging event: ${e.message}", e)
             Sentry.withScope { scope ->
                 scope.setTag("operation", "handleChargingEvent")
+                scope.setContexts("charging", mapOf(
+                    "device_id" to (deviceId ?: "null"),
+                    "station_code" to (currentStationCode ?: "null")
+                ))
                 Sentry.captureException(e)
             }
-            null
+            return null
         }
+    }
+
+    /**
+     * Shows a high-priority notification telling the user to enable location.
+     * The action button opens directly to this app's permission settings page.
+     * This is the only reliable way to prompt the user from a background service
+     * on modern Android — no activity, no dialog, just a notification.
+     */
+  
+
+    /**
+     * Polls every 500ms until both location permission is granted AND location services are on, or timeout.
+     * Returns true when both are ready, false on timeout.
+     */
+    private suspend fun waitForLocationPermissionAndServices(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            delay(500)
+            val hasPermission = LocationUtils.hasLocationPermission(applicationContext)
+            val servicesOn = LocationUtils.isLocationEnabled(applicationContext)
+            if (hasPermission && servicesOn) {
+                Log.d(TAG, "Location permission and services (GPS) are now on")
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Fallback: sends station info without a WiFi-based station code.
+     * DCS will stay at GOOD (not EXCELLENT) since no station is verified.
+     */
+    private suspend fun sendStationInfoWithoutWifi() {
+        val deviceId = DeviceUtils.getStoredDeviceId(applicationContext) ?: return
+        val batteryIntent = applicationContext.registerReceiver(
+            null,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )
+        var consumption: Double? = null
+        var voltage: Double? = null
+        var watt: Double? = null
+
+        if (batteryIntent != null) {
+            val voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            if (voltageMv > 0) voltage = voltageMv / 1000.0
+            val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            if (voltage != null && voltage > 0) {
+                watt = voltage * (if (isCharging) 1.5 else 0.5)
+                consumption = watt / 1000.0
+            }
+        }
+
+        // Send with a placeholder/empty station code — backend treats this as unverified
+//        sec(deviceId, "", consumption, voltage, watt)
     }
 
     private fun sendBackgroundData() {
@@ -1003,6 +1164,8 @@ class BatteryService : Service() {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("charging_started", true)
+                    putExtra("location_available", isLocationAvailable)
                 }
                 
                 // Create pending intent for the full-screen notification
@@ -1058,13 +1221,172 @@ class BatteryService : Service() {
         }
     }
 
+    /**
+     * Shows a notification when charger is CONNECTED and location is disabled.
+     * Uses full-screen intent so the ChargingStatusActivity opens automatically (no tap required).
+     */
+    private fun showLocationRequiredNotificationOnConnect() {
+        try {
+            Log.i(TAG, "Showing location activity and notification on charger connect")
+            
+            val activityIntent = Intent(this, com.example.thingsappandroid.ChargingStatusActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("charging_started", true)
+                putExtra("location_available", false)
+                putExtra("show_as_bottom_sheet", true)
+            }
+            
+            // Show the activity immediately so user sees it (not just a notification)
+            startActivity(activityIntent)
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                CHARGING_STARTED_LOCATION_REQUEST_CODE,
+                activityIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    LOCATION_PERMISSION_CHANNEL_ID,
+                    "Location Permission",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Notifies when location is needed after connecting charger"
+                    setShowBadge(true)
+                    enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notificationBuilder = NotificationCompat.Builder(this, LOCATION_PERMISSION_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_power)
+                .setContentTitle("Location Services Required")
+                .setContentText("Enable location for accurate charging tracking")
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .setFullScreenIntent(pendingIntent, true)
+                .setContentIntent(pendingIntent)
+            
+            val notification = notificationBuilder.build()
+            notificationManager.notify(CHARGING_STARTED_LOCATION_NOTIFICATION_ID, notification)
+            
+            Log.i(TAG, "ChargingStatusActivity started and notification shown")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing location notification on connect: ${e.message}", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "showLocationRequiredNotificationOnConnect")
+                Sentry.captureException(e)
+            }
+        }
+    }
+
+    /**
+     * Shows a notification when location is not available during charging.
+     * This prompts the user to enable location services or grant permission.
+     */
+    private fun showLocationErrorNotification(
+        errorReason: String?, 
+        errorDetails: String?,
+        isPermissionDenied: Boolean,
+        isServicesDisabled: Boolean
+    ) {
+        try {
+            Log.i(TAG, "Showing location error notification - Reason: $errorReason")
+            
+            // Create intent to open location settings or app settings
+            val settingsIntent = when {
+                isServicesDisabled -> Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                isPermissionDenied -> Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                else -> Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            }
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                LOCATION_ERROR_REQUEST_CODE,
+                settingsIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            
+            // Create the notification channel if needed (for Android O+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    LOCATION_ERROR_CHANNEL_ID,
+                    "Location Error",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Notifications for location errors during charging"
+                    enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val title = if (isServicesDisabled) "Enable Location Services" else "Location Permission Required"
+            val content = errorDetails ?: "Please enable location for carbon tracking"
+            
+            // Build the notification
+            val notificationBuilder = NotificationCompat.Builder(this, LOCATION_ERROR_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_power)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .setContentIntent(pendingIntent)
+                .addAction(
+                    android.R.drawable.ic_menu_preferences,
+                    "Open Settings",
+                    pendingIntent
+                )
+            
+            // Show the notification
+            val notification = notificationBuilder.build()
+            notificationManager.notify(LOCATION_ERROR_NOTIFICATION_ID, notification)
+            
+            Log.i(TAG, "Location error notification shown successfully")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing location error notification: ${e.message}", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "showLocationErrorNotification")
+                Sentry.captureException(e)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         try {
             unregisterReceiver(internalBroadcastReceiver)
             Log.d(TAG, "Internal broadcast receiver unregistered")
         } catch (e: Exception) {
-            Log.w(TAG, "Error unregistering receiver", e)
+            Log.w(TAG, "Error unregistering internal receiver", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "BatteryService.onDestroy")
+                scope.level = io.sentry.SentryLevel.WARNING
+                Sentry.captureException(e)
+            }
+        }
+        try {
+            batteryChangeReceiver?.let {
+                unregisterReceiver(it)
+                Log.d(TAG, "BatteryChangeReceiver unregistered")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error unregistering battery receiver", e)
             Sentry.withScope { scope ->
                 scope.setTag("operation", "BatteryService.onDestroy")
                 scope.level = io.sentry.SentryLevel.WARNING
@@ -1153,6 +1475,17 @@ class BatteryService : Service() {
         private const val CHARGING_STATUS_CHANNEL_ID = "charging_status_channel"
         private const val CHARGING_STATUS_NOTIFICATION_ID = 3
         private const val CHARGING_STOPPED_REQUEST_CODE = 100
+        
+        // Full-screen notification for location disabled when charging starts
+        private const val CHARGING_STARTED_LOCATION_REQUEST_CODE = 102
+        private const val CHARGING_STARTED_LOCATION_NOTIFICATION_ID = 5
+        
+        private const val LOCATION_ERROR_CHANNEL_ID = "location_error_channel"
+        private const val LOCATION_ERROR_NOTIFICATION_ID = 4
+        private const val LOCATION_ERROR_REQUEST_CODE = 101
+
+        private const val LOCATION_PERMISSION_CHANNEL_ID = "location_permission_channel"
+        private const val LOCATION_PERMISSION_NOTIFICATION_ID = 3
     }
 }
 

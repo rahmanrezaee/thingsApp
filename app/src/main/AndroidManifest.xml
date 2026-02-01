@@ -60,11 +60,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Full-Screen Activity for Charging Stopped Notification -->
+        <!-- AlertDialog Activity for Charging Location Prompt -->
         <activity
             android:name=".ChargingStatusActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.App.Transparent"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:launchMode="singleTask"

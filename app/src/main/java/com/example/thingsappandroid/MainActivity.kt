@@ -22,8 +22,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.rememberNavController
 import com.example.thingsappandroid.data.local.PreferenceManager
-// import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
-// import com.example.thingsappandroid.ui.theme.ThemeMode
 import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.navigation.AppNavigation
@@ -50,7 +48,7 @@ class MainActivity : ComponentActivity() {
         val coarseLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        
+
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
@@ -58,7 +56,7 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
-        
+
         return (fineLocationGranted || coarseLocationGranted) && notificationGranted
     }
 
@@ -79,7 +77,7 @@ class MainActivity : ComponentActivity() {
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         val locationGranted = fineLocationGranted || coarseLocationGranted
-        
+
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions[Manifest.permission.POST_NOTIFICATIONS] ?: hasNotificationGranted()
         } else {
@@ -104,7 +102,7 @@ class MainActivity : ComponentActivity() {
         val coarseLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        
+
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
@@ -128,6 +126,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Handles the REQUEST_LOCATION_PERMISSION intent sent by BatteryService.
+     * Only requests location — notification is already granted if the service is running.
+     * Returns true if the intent was consumed, false otherwise.
+     */
+    private fun handleLocationPermissionRequest(intent: Intent?): Boolean {
+        if (intent?.action != "com.example.thingsappandroid.REQUEST_LOCATION_PERMISSION") {
+            return false
+        }
+
+        Log.d("MainActivity", "REQUEST_LOCATION_PERMISSION intent received from BatteryService")
+
+        val fineLocationGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseLocationGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            // Already granted — nothing to do, BatteryService's polling loop will pick it up
+            Log.d("MainActivity", "Location already granted, no action needed")
+            return true
+        }
+
+        // Request only location permissions — service is already running so notification is granted
+        permissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
+
+        // Clear the action so it doesn't re-trigger on config changes
+        intent.action = null
+
+        return true
+    }
+
     /** Attempts to start BatteryService. */
     private fun tryStartChargingDetectionServiceOrRequestNotification() {
         if (hasRequiredPermissions) {
@@ -145,7 +182,7 @@ class MainActivity : ComponentActivity() {
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
-                
+
                 if (!notificationGranted) {
                     Log.w("MainActivity", "Notification permission not granted, delaying service start")
                     Toast.makeText(
@@ -157,7 +194,7 @@ class MainActivity : ComponentActivity() {
                     return
                 }
             }
-            
+
             val serviceIntent = Intent(this, BatteryService::class.java)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -264,6 +301,8 @@ class MainActivity : ComponentActivity() {
             startChargingDetectionService()
         }
 
+        // Handle intents: location permission request, station code, deep links
+        handleLocationPermissionRequest(intent)
         handleDeepLink(intent)
         checkStationCodeIntent(intent)
 
@@ -300,9 +339,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        // Handle deep link when app is already running
         intent?.let {
-            setIntent(it) // Update the activity intent so checkStationCodeIntent sees latest extras
+            setIntent(it) // Update the activity intent so downstream checks see the latest extras
+            // Handle all possible intent types
+            handleLocationPermissionRequest(it)
             handleDeepLink(it)
             checkStationCodeIntent(it)
         }
