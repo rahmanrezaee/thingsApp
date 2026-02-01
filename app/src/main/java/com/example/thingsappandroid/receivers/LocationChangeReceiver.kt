@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
+import com.example.thingsappandroid.services.BatteryServiceActions
 import android.util.Log
 
 /**
@@ -26,7 +27,7 @@ class LocationChangeReceiver : BroadcastReceiver() {
                 Log.d(TAG, "Location services changed - Enabled: $isLocationEnabled")
                 
                 // Broadcast to BatteryService
-                val serviceIntent = Intent("com.example.thingsappandroid.LOCATION_CHANGED").apply {
+                val serviceIntent = Intent(BatteryServiceActions.LOCATION_CHANGED).apply {
                     putExtra("is_enabled", isLocationEnabled)
                 }
                 context.sendBroadcast(serviceIntent)

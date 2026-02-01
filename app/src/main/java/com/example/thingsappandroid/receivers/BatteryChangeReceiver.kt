@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import com.example.thingsappandroid.services.BatteryServiceActions
 import android.util.Log
 
 /**
@@ -40,7 +41,7 @@ class BatteryChangeReceiver : BroadcastReceiver() {
                 Log.d(TAG, "Battery changed - Level: $batteryPct%, Charging: $isCharging, Voltage: ${voltage}mV, Plugged: $plugged")
 
                 // Broadcast to BatteryService and HomeViewModel
-                val serviceIntent = Intent("com.example.thingsappandroid.BATTERY_CHANGED").apply {
+                val serviceIntent = Intent(BatteryServiceActions.BATTERY_CHANGED).apply {
                     setPackage(context.packageName)
                     putExtra("is_charging", isCharging)
                     putExtra("level", batteryPct)

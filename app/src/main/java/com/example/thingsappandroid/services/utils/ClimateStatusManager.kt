@@ -6,6 +6,7 @@ import android.util.Log
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.model.SetClimateStatusRequest
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
@@ -81,7 +82,7 @@ class ClimateStatusManager(private val context: Context) {
                 Log.w(TAG, "⚠️ Location not available: $errorReason")
                 
                 // Broadcast location error to BatteryService to show notification
-                val locationErrorIntent = Intent("com.example.thingsappandroid.LOCATION_ERROR").apply {
+                val locationErrorIntent = Intent(BatteryServiceActions.LOCATION_ERROR).apply {
                     putExtra("error_reason", errorReason)
                     putExtra("error_details", errorDetails)
                     putExtra("is_permission_denied", !hasLocationPermission)

@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.WifiUtils
 
 /**
@@ -34,7 +35,7 @@ class WiFiChangeReceiver : BroadcastReceiver() {
                 Log.d(TAG, "WiFi state changed - Connected: $isConnected, BSSID: ${bssid?.take(10)}...")
                 
                 // Broadcast to BatteryService
-                val serviceIntent = Intent("com.example.thingsappandroid.WIFI_CHANGED").apply {
+                val serviceIntent = Intent(BatteryServiceActions.WIFI_CHANGED).apply {
                     putExtra("is_connected", isConnected)
                     putExtra("bssid", bssid)
                 }
