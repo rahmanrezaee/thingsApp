@@ -6,9 +6,10 @@ import com.example.thingsappandroid.util.ClimateData
 
 // 1. State
 data class HomeState(
-    val isLoading: Boolean = false,
-    val batteryLevel: Float = 0f,
+    val isLoading: Boolean = true, // Start with loading to avoid showing "No Data" flash
+    val batteryLevel: Float = -1f, // -1 means unknown/not received yet
     val isCharging: Boolean = false,
+    val hasBatteryData: Boolean = false, // Tracks if we've received real battery data
     val batteryCapacityMwh: Int? = null, // Battery capacity in mWh
     val deviceName: String = "",
 
@@ -44,6 +45,18 @@ data class HomeState(
     /** Persists selected bottom nav tab so back from profile sub-screens returns to Profile, not Home */
     val selectedBottomTabIndex: Int = 0,
 
+    // WiFi/Offline Mode
+    val isOfflineMode: Boolean = false,
+    val wifiErrorReason: String? = null,
+    val wifiErrorDetails: String? = null,
+    val showWifiErrorDialog: Boolean = false,
+    
+    // Location
+    val isLocationEnabled: Boolean = false,
+    val showLocationEnableDialog: Boolean = false,
+    val pendingDeviceInfoLoad: Boolean = false, // True when waiting for location to load device info
+    val locationRequestSkipped: Boolean = false, // True if user skipped location request
+
     val error: String? = null
 )
 
@@ -74,6 +87,17 @@ sealed class ActivityIntent {
     object OpenCarbonIntensityMetricSheet : ActivityIntent()
     object DismissCarbonIntensityMetricSheet : ActivityIntent()
     data class SelectBottomTab(val index: Int) : ActivityIntent()
+    
+    // WiFi Error Dialog
+    object ShowWifiError : ActivityIntent()
+    object DismissWifiError : ActivityIntent()
+    object OpenLocationSettings : ActivityIntent()
+    object OpenWifiSettings : ActivityIntent()
+    
+    // Location Check
+    object CheckLocationStatus : ActivityIntent()
+    object LocationEnabled : ActivityIntent()
+    object SkipLocationRequest : ActivityIntent() // User chose to skip location enable
 }
 
 // 3. Effects (One-off events like Navigation/Toast)
@@ -82,4 +106,5 @@ sealed class ActivityEffect {
     object NavigateToLogin : ActivityEffect()
     object StationUpdateSuccess : ActivityEffect()
     data class StationUpdateError(val message: String) : ActivityEffect()
+    object RequestEnableLocation : ActivityEffect() // Show dialog to enable location
 }

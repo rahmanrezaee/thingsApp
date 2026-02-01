@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.thingsappandroid.BuildConfig
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.ui.components.BackButtonTopBar
@@ -47,7 +47,7 @@ private const val TERMS_URL = "https://example.com/terms"
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
-    activityViewModel: HomeViewModel = viewModel(
+    activityViewModel: HomeViewModel = hiltViewModel(
         viewModelStoreOwner = LocalContext.current as ComponentActivity
     )
 ) {

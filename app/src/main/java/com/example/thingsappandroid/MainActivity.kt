@@ -40,16 +40,17 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var preferenceManager: PreferenceManager
 
-    // Both location and notification are required; app is blocked until granted.
-    private var hasAllRequiredPermissions by mutableStateOf(false)
+    // Location and Notification granted - can proceed past permission screen.
+    private var hasRequiredPermissions by mutableStateOf(false)
 
-    private fun computeHasAllRequiredPermissions(): Boolean {
-        val locationGranted = ContextCompat.checkSelfPermission(
+    private fun computeHasRequiredPermissions(): Boolean {
+        val fineLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseLocationGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
@@ -57,46 +58,45 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
-        return locationGranted && notificationGranted
+        
+        return (fineLocationGranted || coarseLocationGranted) && notificationGranted
     }
 
-    // Permission request launcher for location and notifications
-    private val permissionLauncher = registerForActivityResult(
+    private fun hasNotificationGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    // Combined permission launcher
+    private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val locationGranted = fineLocationGranted || coarseLocationGranted
+        
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: true
+            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: hasNotificationGranted()
         } else {
             true
         }
 
-        val locationGranted = fineLocationGranted || coarseLocationGranted
-        hasAllRequiredPermissions = locationGranted && notificationGranted
+        hasRequiredPermissions = locationGranted && notificationGranted
 
-        if (hasAllRequiredPermissions) {
-            Toast.makeText(this, "Permissions granted. You can use the app.", Toast.LENGTH_SHORT).show()
+        if (hasRequiredPermissions) {
+            Toast.makeText(this, "All permissions granted.", Toast.LENGTH_SHORT).show()
             startChargingDetectionService()
         } else {
-            if (!locationGranted) {
-                Toast.makeText(
-                    this,
-                    "Location permission is required to use this app.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
-                Toast.makeText(
-                    this,
-                    "Notification permission is required to use this app.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            Toast.makeText(this, "Both Location and Notification permissions are required.", Toast.LENGTH_LONG).show()
         }
     }
 
-    /** Request location and notification permissions. Call when user taps "Grant permissions" on the required-permissions screen. */
+    /** Request both location and notification permissions. */
     fun checkAndRequestPermissions() {
         val fineLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
         val coarseLocationGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+        
         val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
@@ -120,7 +121,19 @@ class MainActivity : ComponentActivity() {
         }
 
         if (permissionsToRequest.isNotEmpty()) {
-            permissionLauncher.launch(permissionsToRequest.toTypedArray())
+            permissionsLauncher.launch(permissionsToRequest.toTypedArray())
+        } else {
+            hasRequiredPermissions = true
+            startChargingDetectionService()
+        }
+    }
+
+    /** Attempts to start BatteryService. */
+    private fun tryStartChargingDetectionServiceOrRequestNotification() {
+        if (hasRequiredPermissions) {
+            startChargingDetectionService()
+        } else {
+            checkAndRequestPermissions()
         }
     }
 
@@ -244,10 +257,10 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hasAllRequiredPermissions = computeHasAllRequiredPermissions()
+        hasRequiredPermissions = computeHasRequiredPermissions()
 
-        // Start service only if both permissions are already granted (e.g. returning user)
-        if (hasAllRequiredPermissions) {
+        // Start service when we have required permissions - e.g. returning user
+        if (hasRequiredPermissions) {
             startChargingDetectionService()
         }
 
@@ -262,13 +275,26 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         onOnboardingFinished = { preferenceManager.setOnboardingCompleted(true) },
                         onRequestPermissions = { checkAndRequestPermissions() },
-                        hasAllRequiredPermissions = hasAllRequiredPermissions,
+                        hasRequiredPermissions = hasRequiredPermissions,
                         initialIntent = intent
                     )
 
                     GlobalMessageHost()
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-check WiFi status when user returns from settings
+        // This will refresh device info if WiFi/Location was enabled
+        try {
+            val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
+            viewModel.dispatch(ActivityIntent.ShowWifiError)
+            viewModel.dispatch(ActivityIntent.RefreshData)
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Failed to refresh WiFi status on resume: ${e.message}")
         }
     }
 

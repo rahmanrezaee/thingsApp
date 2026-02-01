@@ -26,21 +26,5 @@ object NetworkUtils {
         }
     }
     
-    /**
-     * Check if device has WiFi connection
-     */
-    fun isWifiConnected(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-            
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-        } else {
-            @Suppress("DEPRECATION")
-            val networkInfo = connectivityManager.activeNetworkInfo
-            networkInfo?.type == ConnectivityManager.TYPE_WIFI && networkInfo.isConnected
-        }
-    }
+
 }

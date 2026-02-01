@@ -4,7 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.BatteryManager
 import android.location.LocationManager
 import android.os.Build
 import android.provider.Settings
@@ -17,10 +20,10 @@ import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
-import com.example.thingsappandroid.services.BatteryMonitor
 import com.example.thingsappandroid.util.BatteryUtil
 import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.WifiUtils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import io.sentry.Sentry
 import io.sentry.Breadcrumb
 import io.sentry.SentryLevel
@@ -28,20 +31,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import javax.inject.Inject
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
-
-    // Dependencies
-    private val repository = ThingsRepository()
-    private val tokenManager = TokenManager(application)
-    private val batteryMonitor = BatteryMonitor(application)
-    private val preferenceManager = PreferenceManager(application)
-    
-    // Track previous charging state to detect plug-in events
-    private var wasCharging = false
+@HiltViewModel
+class HomeViewModel @Inject constructor(
+    application: Application,
+    private val tokenManager: TokenManager,
+    private val preferenceManager: PreferenceManager
+) : AndroidViewModel(application) {
 
     // MVI State
     private val _state = MutableStateFlow(HomeState())
@@ -54,6 +55,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // Cached Device ID
     private var cachedDeviceId: String? = null
 
+    // Periodic battery update job
+    private var batteryUpdateJob: kotlinx.coroutines.Job? = null
+
     init {
         dispatch(ActivityIntent.Initialize)
     }
@@ -61,7 +65,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun dispatch(intent: ActivityIntent) {
         when (intent) {
             ActivityIntent.Initialize -> initialize()
-            ActivityIntent.RefreshData -> refreshServerData()
             ActivityIntent.Logout -> performLogout()
             ActivityIntent.NavigateToLogin -> {
                 viewModelScope.launch { _effect.send(ActivityEffect.NavigateToLogin) }
@@ -125,6 +128,144 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             is ActivityIntent.SelectBottomTab -> {
                 _state.update { it.copy(selectedBottomTabIndex = intent.index) }
             }
+            ActivityIntent.RefreshData -> {
+                // Check location before refreshing data
+                checkLocationAndLoadDeviceInfo()
+            }
+            ActivityIntent.CheckLocationStatus -> {
+                checkLocationAndLoadDeviceInfo()
+            }
+            ActivityIntent.LocationEnabled -> {
+                // User enabled location, now proceed with device info loading
+                _state.update { 
+                    it.copy(
+                        isLocationEnabled = true,
+                        showLocationEnableDialog = false,
+                        locationRequestSkipped = false
+                    ) 
+                }
+                if (_state.value.pendingDeviceInfoLoad) {
+                    viewModelScope.launch {
+                        loadDeviceInfoWithRetry()
+                    }
+                }
+            }
+            ActivityIntent.SkipLocationRequest -> {
+                // User skipped location request - load cached data and don't ask again
+                _state.update {
+                    it.copy(
+                        showLocationEnableDialog = false,
+                        locationRequestSkipped = true,
+                        pendingDeviceInfoLoad = false
+                    )
+                }
+                // Load cached data only
+                viewModelScope.launch {
+                    val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
+                    if (cachedDeviceInfo != null) {
+                        Log.d("ActivityViewModel", "Loading cached device info (location skipped)")
+                        val mappedClimate = cachedDeviceInfo.climateStatus?.let { statusInt ->
+                            ClimateUtils.getMappedClimateData(statusInt)
+                        } ?: ClimateUtils.getMappedClimateData(null as String?)
+
+                        _state.update {
+                            it.copy(
+                                deviceInfo = cachedDeviceInfo,
+                                avoidedEmissions = cachedDeviceInfo.totalAvoided?.toFloat() ?: 0f,
+                                totalConsumedKwh = cachedDeviceInfo.totalConsumed?.toFloat() ?: 0f,
+                                carbonIntensity = cachedDeviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                                stationInfo = cachedDeviceInfo.stationInfo,
+                                stationName = cachedDeviceInfo.stationInfo?.stationName,
+                                isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
+                                climateData = mappedClimate,
+                                isLoading = false,
+                                error = null
+                            )
+                        }
+                    } else {
+                        // No cached data - show error
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Location is required for fresh data. Enable location to get latest information."
+                            )
+                        }
+                    }
+                }
+            }
+            ActivityIntent.ShowWifiError, ActivityIntent.DismissWifiError,
+            ActivityIntent.OpenLocationSettings, ActivityIntent.OpenWifiSettings -> {
+                // Handled by UI layer - these are navigation/actions that don't need VM processing
+            }
+        }
+    }
+    
+    /**
+     * Checks if location is enabled before loading device info.
+     * If not enabled, shows dialog and waits for user to enable it.
+     * If user previously skipped, loads cached data without showing dialog.
+     */
+    private fun checkLocationAndLoadDeviceInfo() {
+        val locationEnabled = isLocationEnabled()
+        val skipped = _state.value.locationRequestSkipped
+
+        if (locationEnabled) {
+            // Location is enabled - proceed with fresh data load
+            _state.update {
+                it.copy(
+                    isLocationEnabled = true,
+                    showLocationEnableDialog = false,
+                    pendingDeviceInfoLoad = false
+                ) 
+            }
+            viewModelScope.launch {
+                loadDeviceInfoWithRetry()
+            }
+        } else if (skipped) {
+            // User previously skipped - load cached data only, don't ask again
+            Log.d("ActivityViewModel", "Location disabled but user skipped request - loading cached data")
+            viewModelScope.launch {
+                val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
+                if (cachedDeviceInfo != null) {
+                    val mappedClimate = cachedDeviceInfo.climateStatus?.let { statusInt ->
+                        ClimateUtils.getMappedClimateData(statusInt)
+                    } ?: ClimateUtils.getMappedClimateData(null as String?)
+
+                    _state.update {
+                        it.copy(
+                            deviceInfo = cachedDeviceInfo,
+                            avoidedEmissions = cachedDeviceInfo.totalAvoided?.toFloat() ?: 0f,
+                            totalConsumedKwh = cachedDeviceInfo.totalConsumed?.toFloat() ?: 0f,
+                            carbonIntensity = cachedDeviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                            stationInfo = cachedDeviceInfo.stationInfo,
+                            stationName = cachedDeviceInfo.stationInfo?.stationName,
+                            isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
+                            climateData = mappedClimate,
+                            isLoading = false,
+                            error = null
+                        )
+                    }
+        } else {
+            _state.update { 
+                it.copy(
+                            isLoading = false,
+                            error = "No cached data available. Enable location to load device info."
+                        )
+                    }
+                }
+            }
+        } else {
+            // Location disabled and not skipped - show dialog
+            _state.update {
+                it.copy(
+                    isLocationEnabled = false,
+                    showLocationEnableDialog = true,
+                    pendingDeviceInfoLoad = true
+                ) 
+            }
+            viewModelScope.launch {
+                _effect.send(ActivityEffect.RequestEnableLocation)
+            }
         }
     }
 
@@ -133,6 +274,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             tokenManager.clearToken()
             _effect.send(ActivityEffect.NavigateToLogin)
         }
+    }
+
+    /**
+     * Checks if location services are enabled (GPS or Network provider)
+     */
+    private fun isLocationEnabled(): Boolean {
+        val context = getApplication<Application>()
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
     @SuppressLint("HardwareIds")
@@ -197,14 +348,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                try {
-                    Log.w("ActivityViewModel", "No location found from LocationManager, using default coordinates")
-                } catch (e: Exception) {
-                    Log.w("ActivityViewModel", "Error with FusedLocationProvider: ${e.message}")
-                }
-
                 // Default fallback coordinates (could be a default city like London or user's last known location)
-                Log.w("ActivityViewModel", "Using default coordinates")
+                Log.w("ActivityViewModel", "No location found from LocationManager, using default coordinates")
                 Pair(51.5074, -0.1278) // London coordinates as fallback
 
             } catch (e: Exception) {
@@ -217,7 +362,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadDeviceInfo() {
         _state.update { it.copy(isLoading = true) }
         val deviceId = getDeviceId()
-        
+
         val (wifiAddress, stationCode) = withContext(Dispatchers.IO) {
             val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
             val station = _state.value.stationCode
@@ -282,6 +427,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         error = null // Clear any previous errors
                     )
                 }
+                // Save to cache for next time
+                preferenceManager.saveLastDeviceInfo(deviceInfo)
             } else {
                 Log.d("ActivityViewModel", "Error: ${response.code()}")
                 _state.update {
@@ -310,8 +457,190 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Loads device info with automatic retry on failure.
+     * Retries up to 3 times with exponential backoff before showing error.
+     */
+    private suspend fun loadDeviceInfoWithRetry() {
+        var retryCount = 0
+        val maxRetries = 3
+        var lastError: String? = null
+        
+        while (retryCount < maxRetries) {
+            try {
+                _state.update { it.copy(isLoading = true, error = null) }
+                
+                val deviceId = getDeviceId()
+                val (wifiAddress, stationCode) = withContext(Dispatchers.IO) {
+                    val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
+                    val station = _state.value.stationCode
+                    Pair(wifi, station)
+                }
+
+                val response = withContext(Dispatchers.IO) {
+                    NetworkModule.api.getDeviceInfo(
+                        DeviceInfoRequest(
+                            deviceId = deviceId,
+                            stationCode = stationCode,
+                            wifiAddress = wifiAddress,
+                            currentVersion = "1.0.0"
+                        )
+                    )
+                }
+
+                if (response.isSuccessful && response.body() != null) {
+                    val apiResponse = response.body()!!
+                    val deviceInfo = apiResponse.data
+                    if (deviceInfo == null) {
+                        lastError = "API response has no data field"
+                        retryCount++
+                        if (retryCount < maxRetries) {
+                            val delayMs = 1000L * retryCount // Exponential backoff: 1s, 2s
+                            Log.d("ActivityViewModel", "Retry $retryCount/$maxRetries after ${delayMs}ms - API returned no data")
+                            delay(delayMs)
+                            continue
+                        }
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                error = lastError
+                            )
+                        }
+                        return
+                    }
+
+                    // Success - process the data
+                    val mappedClimate = deviceInfo.climateStatus?.let { statusInt ->
+                        ClimateUtils.getMappedClimateData(statusInt)
+                    } ?: ClimateUtils.getMappedClimateData(null as String?)
+
+                    preferenceManager.saveClimateStatus(deviceInfo.climateStatus)
+
+                    val hasStation = deviceInfo.stationInfo != null
+                    preferenceManager.setHasStation(hasStation)
+                    if (hasStation) {
+                        getApplication<Application>().sendBroadcast(
+                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                        )
+                    }
+                    
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            deviceInfo = deviceInfo,
+                            avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
+                            totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
+                            carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                            stationInfo = deviceInfo.stationInfo,
+                            stationName = deviceInfo.stationInfo?.stationName,
+                            isGreenStation = deviceInfo.stationInfo?.isGreen == true,
+                            climateData = mappedClimate,
+                            error = null
+                        )
+                    }
+                    // Save to cache for next time
+                    preferenceManager.saveLastDeviceInfo(deviceInfo)
+                    Log.d("ActivityViewModel", "Device info loaded successfully on attempt ${retryCount + 1} and saved to cache")
+                    return // Success - exit retry loop
+                } else {
+                    lastError = "Failed to load device info: ${response.code()}"
+                    retryCount++
+                    if (retryCount < maxRetries) {
+                        val delayMs = 1000L * retryCount
+                        Log.d("ActivityViewModel", "Retry $retryCount/$maxRetries after ${delayMs}ms - HTTP ${response.code()}")
+                        delay(delayMs)
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = "Error loading device info: ${e.message}"
+                Log.d("ActivityViewModel", "Attempt ${retryCount + 1}/$maxRetries failed: ${e.message}")
+                
+                retryCount++
+                if (retryCount < maxRetries) {
+                    val delayMs = 1000L * retryCount
+                    Log.d("ActivityViewModel", "Retrying after ${delayMs}ms...")
+                    delay(delayMs)
+                } else {
+                    // All retries exhausted - log to Sentry
+                    viewModelScope.launch {
+                        val deviceIdForSentry = try { getDeviceId() } catch (ex: Exception) { "unknown" }
+                        Sentry.withScope { scope ->
+                            scope.setTag("operation", "loadDeviceInfo")
+                            scope.setTag("retry_count", retryCount.toString())
+                            scope.setContexts("device", mapOf("device_id" to deviceIdForSentry))
+                            Sentry.captureException(e)
+                        }
+                    }
+                }
+            }
+        }
+        
+        // All retries failed
+        _state.update {
+            it.copy(
+                isLoading = false,
+                error = lastError ?: "Failed to load device info after $maxRetries attempts"
+            )
+        }
+    }
+
+    /**
+     * Reads current battery status from system using BatteryManager API
+     */
+    private fun readBatteryStatus() {
+        try {
+            val context = getApplication<Application>()
+            
+            // Method 1: Use BatteryManager for reliable percentage (0-100)
+            val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            val batteryPct = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            
+            // Method 2: Also try sticky broadcast as backup
+            val batteryStatus = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val calculatedPct = if (level >= 0 && scale > 0) level * 100 / scale else -1
+            
+            // Get charging status from sticky broadcast
+            val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            
+
+                _state.update {
+                    it.copy(
+                        batteryLevel = calculatedPct.toFloat() / 100,
+                        isCharging = isCharging,
+                        hasBatteryData = true
+                    )
+                }
+
+        } catch (e: Exception) {
+            Log.e("HomeViewModel", "Error reading battery status", e)
+        }
+    }
+
+    /**
+     * Starts periodic battery status updates every 1 second
+     */
+    private fun startPeriodicBatteryUpdates() {
+        batteryUpdateJob?.cancel()
+        
+        // Read battery immediately first
+        readBatteryStatus()
+        
+        batteryUpdateJob = viewModelScope.launch {
+            while (this.isActive) {
+                delay(1000) // Wait 1 second before next read
+                readBatteryStatus()
+            }
+        }
+        Log.d("HomeViewModel", "Periodic battery updates started (1 second interval)")
+    }
+
     private fun initialize() {
-        startServices()
+        // Start periodic battery updates every 1 second
+        startPeriodicBatteryUpdates()
 
         // Set Device Name
         _state.update { it.copy(deviceName = Build.MODEL) }
@@ -334,45 +663,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Load device info first
+        // Load cached device info first for immediate display (doesn't require location)
         viewModelScope.launch {
-            loadDeviceInfo()
-        }
-
-        // Combine local flows into State
-        viewModelScope.launch {
-            combine(
-                batteryMonitor.batteryLevel,
-                batteryMonitor.isCharging,
-                batteryMonitor.consumption
-            ) { args: Array<Any?> ->
-                args
-            }.collect { args ->
-                val battery = args[0] as Float
-                val charging = args[1] as Boolean
-                val consumption = args[2] as Float
-
-                // BatteryService handles station code notification, no need to show here
-                // Just track charging state for other purposes
-                if (charging) {
-                    // Charging started
-                } else {
-                    // Charging stopped
-                    if (_state.value.showStationCodeDialog) {
-                        _state.update { it.copy(showStationCodeDialog = false, stationCodeError = null) }
-                    }
-                }
+            val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
+            if (cachedDeviceInfo != null) {
+                Log.d("ActivityViewModel", "Loading cached device info for immediate display")
+                val mappedClimate = cachedDeviceInfo.climateStatus?.let { statusInt ->
+                    ClimateUtils.getMappedClimateData(statusInt)
+                } ?: ClimateUtils.getMappedClimateData(null as String?)
                 
-                wasCharging = charging
-
                 _state.update {
                     it.copy(
-                        batteryLevel = battery,
-                        isCharging = charging,
-                        currentUsageKwh = consumption
+                        deviceInfo = cachedDeviceInfo,
+                        avoidedEmissions = cachedDeviceInfo.totalAvoided?.toFloat() ?: 0f,
+                        totalConsumedKwh = cachedDeviceInfo.totalConsumed?.toFloat() ?: 0f,
+                        carbonIntensity = cachedDeviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                        stationInfo = cachedDeviceInfo.stationInfo,
+                        stationName = cachedDeviceInfo.stationInfo?.stationName,
+                        isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
+                        climateData = mappedClimate,
+                        isLoading = true, // Still show loading while we refresh
+                        error = null
                     )
                 }
             }
+            
+            // Then check location and refresh from API
+            checkLocationAndLoadDeviceInfo()
         }
 
         // Start Sync Loop
@@ -385,43 +702,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun refreshServerData() {
-        viewModelScope.launch {
-            val id = getDeviceId()
-
-            // Upload Consumption (Snapshot) - only if we have device info loaded
-            val currentState = _state.value
-            if (currentState.deviceInfo != null && currentState.currentUsageKwh > 0) {
-                // Check API level for uploadConsumption as it requires API 26
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // Get current location for consumption upload
-                    val (latitude, longitude) = getCurrentLocation()
-                    
-                    repository.uploadConsumption(
-                        context = getApplication(),
-                        deviceId = id,
-                        watts = currentState.currentUsageKwh * 1000 / 1.0,
-                        kwh = currentState.currentUsageKwh.toDouble(),
-                        batteryLevel = (currentState.batteryLevel * 100).toInt(),
-                        isCharging = currentState.isCharging,
-                        deviceInfo = currentState.deviceInfo,
-                        latitude = latitude,
-                        longitude = longitude,
-                        stationCode = currentState.stationCode
-                    )
-                }
-            }
-        }
-    }
-
-    private fun startServices() {
-        batteryMonitor.startMonitoring()
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        batteryMonitor.stopMonitoring()
-    }
     
     private fun submitStationCode(stationCode: String) {
         viewModelScope.launch {
@@ -439,16 +719,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
             try {
                 val deviceId = getDeviceId()
-                val result = repository.setStation(deviceId, stationCode)
+                val request = com.example.thingsappandroid.data.model.SetStationRequest(
+                    deviceId = deviceId,
+                    stationCode = stationCode
+                )
+                val result = NetworkModule.api.setStation(request)
 
-                if (result.first) {
+                if (result.isSuccessful) {
                     _effect.send(ActivityEffect.StationUpdateSuccess)
                     _state.update { it.copy(showStationCodeDialog = false) }
                     // Refresh device info to get updated station info
                     loadDeviceInfo()
                 } else {
                     // Keep dialog open and show error
-                    val errorMsg = result.second ?: "Failed to update station code"
+                    val errorMsg = result.errorBody()?.string() ?: "Failed to update station code"
                     _state.update { it.copy(stationCodeError = errorMsg) }
                 }
             } catch (e: Exception) {
@@ -467,5 +751,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(isUpdatingStation = false) }
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Cancel periodic battery updates
+        batteryUpdateJob?.cancel()
+        batteryUpdateJob = null
+        Log.d("HomeViewModel", "Periodic battery updates cancelled")
     }
 }

@@ -34,7 +34,7 @@ fun RequiredPermissionsScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Required permissions",
+            text = "Required Permissions",
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold
             ),
@@ -43,16 +43,24 @@ fun RequiredPermissionsScreen(
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Location and Notification are essential to use this app. Please grant both permissions to continue.",
+            text = "To provide the best charging experience, we need access to your Location and Notifications.",
             style = MaterialTheme.typography.bodyLarge,
             color = TextSecondary,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "• Location: Used to show local carbon intensity.\n• Notifications: Used for real-time charging status updates.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        )
         Spacer(modifier = Modifier.height(40.dp))
         PrimaryButton(
             modifier = Modifier.fillMaxWidth(),
-            text = "Grant permissions",
+            text = "Grant Permissions",
             onClick = onGrantPermissions
         )
     }

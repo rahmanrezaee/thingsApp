@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.ui.components.showErrorMessage
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.example.thingsappandroid.ui.components.showInfoMessage
 import com.example.thingsappandroid.ui.components.showSuccessMessage
 import io.sentry.Sentry
@@ -20,11 +21,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import javax.inject.Inject
 
-class AuthViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class AuthViewModel @Inject constructor(
+    application: Application,
+    private val repository: ThingsRepository
+) : AndroidViewModel(application) {
 
     // Dependencies
-    private val repository = ThingsRepository()
     private val tokenManager = TokenManager(application)
 
     // MVI State

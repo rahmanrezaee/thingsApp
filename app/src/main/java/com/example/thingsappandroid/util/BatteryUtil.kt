@@ -1,6 +1,8 @@
 package com.example.thingsappandroid.util
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import android.widget.Toast
@@ -92,5 +94,65 @@ object BatteryUtil {
     fun getBatteryCapacityMwh(context: Context): Int {
         val capacityMah = getBatteryCapacity(context)
         return convertMahToMwh(capacityMah)
+    }
+    
+    /**
+     * Data class holding battery information
+     */
+    data class BatteryInfo(
+        val level: Int,           // Battery percentage (0-100)
+        val isCharging: Boolean,  // Whether device is charging
+        val voltage: Int,         // Voltage in millivolts
+        val plugged: Int,         // Plugged state (AC, USB, etc.)
+        val temperature: Int,     // Temperature in tenths of Celsius
+        val health: Int           // Battery health status
+    )
+    
+    /**
+     * Gets current battery information directly from the system.
+     * Uses registerReceiver with null receiver to get the current sticky broadcast.
+     * @param context The application context
+     * @return BatteryInfo object with current battery state, or null if unavailable
+     */
+    fun getBatteryInfo(context: Context): BatteryInfo? {
+        return try {
+            val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            
+            if (batteryIntent != null) {
+                val level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                val batteryPct = if (level >= 0 && scale > 0) {
+                    ((level * 100f) / scale).toInt()
+                } else {
+                    -1
+                }
+                
+                val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL
+                
+                val voltage = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+                val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+                val temperature = batteryIntent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                val health = batteryIntent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)
+                
+                android.util.Log.d("BatteryUtil", "getBatteryInfo - Level: $batteryPct%, Charging: $isCharging, Voltage: ${voltage}mV")
+                
+                BatteryInfo(
+                    level = batteryPct,
+                    isCharging = isCharging,
+                    voltage = voltage,
+                    plugged = plugged,
+                    temperature = temperature,
+                    health = health
+                )
+            } else {
+                android.util.Log.w("BatteryUtil", "Failed to get battery info - registerReceiver returned null")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BatteryUtil", "Error getting battery info: ${e.message}", e)
+            null
+        }
     }
 }

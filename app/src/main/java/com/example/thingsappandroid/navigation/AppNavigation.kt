@@ -47,7 +47,7 @@ fun AppNavigation(
     navController: NavHostController,
     onOnboardingFinished: () -> Unit,
     onRequestPermissions: () -> Unit,
-    hasAllRequiredPermissions: Boolean,
+    hasRequiredPermissions: Boolean,
     initialIntent: Intent? = null,
     modifier: Modifier = Modifier
 ) {
@@ -117,13 +117,15 @@ fun AppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = if (hasAllRequiredPermissions) "splash_route" else "permission_route",
+        startDestination = if (hasRequiredPermissions) "splash_route" else "permission_route",
         modifier = modifier
     ) {
         composable("permission_route") {
-            RequiredPermissionsScreen(onGrantPermissions = onRequestPermissions)
-            LaunchedEffect(hasAllRequiredPermissions) {
-                if (hasAllRequiredPermissions) {
+            RequiredPermissionsScreen(
+                onGrantPermissions = onRequestPermissions
+            )
+            LaunchedEffect(hasRequiredPermissions) {
+                if (hasRequiredPermissions) {
                     navController.navigate("splash_route") {
                         popUpTo("permission_route") { inclusive = true }
                     }
@@ -190,7 +192,7 @@ fun AppNavigation(
         composable(Screen.Login.route) {
             LoginScreen()
 
-            val authViewModel: AuthViewModel = viewModel()
+            val authViewModel: AuthViewModel = hiltViewModel()
             LaunchedEffect(Unit) {
                 authViewModel.effect.collectLatest { effect ->
                     when (effect) {
@@ -278,7 +280,7 @@ fun AppNavigation(
         }
 
         composable(Screen.Home.route) {
-            val homeViewModel: HomeViewModel = viewModel()
+            val homeViewModel: HomeViewModel = hiltViewModel()
 
             LaunchedEffect(Unit) {
                 homeViewModel.effect.collectLatest { effect ->
@@ -298,7 +300,7 @@ fun AppNavigation(
             route = Screen.StationCode.route,
             dialogProperties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            val activityViewModel: HomeViewModel = viewModel()
+            val activityViewModel: HomeViewModel = hiltViewModel()
             // Access state directly as getters/setters were removed
             val currentStationCode = activityViewModel.state.collectAsState().value.stationCode ?: ""
             
@@ -361,7 +363,7 @@ fun AppNavigation(
             Log.d("AppNavigation", "From arguments - requestedBy: ${backStackEntry.arguments?.getString("requestedby")}, requestedUrl: ${backStackEntry.arguments?.getString("requestedUrl")}, sessionId: ${backStackEntry.arguments?.getString("sessionId")}")
             Log.d("AppNavigation", "Final values - requestedBy: $requestedBy, requestedUrl: $requestedUrl, sessionId: $sessionId")
 
-            val authorizeViewModel: AuthorizeViewModel = viewModel()
+            val authorizeViewModel: AuthorizeViewModel = hiltViewModel()
             val state by authorizeViewModel.uiState.collectAsState()
 
             LaunchedEffect(state.isSuccess) {

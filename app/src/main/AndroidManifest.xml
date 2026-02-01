@@ -60,6 +60,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Full-Screen Activity for Charging Stopped Notification -->
+        <activity
+            android:name=".ChargingStatusActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true" />
+
         <service
             android:name=".services.BatteryService"
             android:enabled="true"
@@ -83,6 +95,38 @@
             android:name=".receivers.StationCodeReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <receiver
+            android:name=".receivers.BatteryChangeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BATTERY_CHANGED" />
+                <action android:name="android.intent.action.POWER_CONNECTED" />
+                <action android:name="android.intent.action.POWER_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receivers.WiFiChangeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
+                <action android:name="android.net.wifi.STATE_CHANGE" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receivers.LocationChangeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.location.PROVIDERS_CHANGED" />
+                <action android:name="android.location.MODE_CHANGED" />
+            </intent-filter>
+        </receiver>
     
     <!-- Required: set your sentry.io project identifier (DSN) -->
     <meta-data android:name="io.sentry.dsn" android:value="https://a997e0dd8a9a495ae5a74755cc762050@o4507145257025536.ingest.de.sentry.io/4510749854400592" />

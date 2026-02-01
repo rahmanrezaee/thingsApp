@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import com.example.thingsappandroid.features.home.components.ElectricityBatteryB
 import com.example.thingsappandroid.features.home.components.ElectricityConsumptionBottomSheet
 import com.example.thingsappandroid.features.home.components.GridCarbonIntensityBottomSheet
 import com.example.thingsappandroid.features.home.components.StationBottomSheet
+import com.example.thingsappandroid.features.home.components.WifiErrorDialog
 import com.example.thingsappandroid.util.TimeUtility
 
 @Composable
@@ -136,7 +138,7 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .zIndex(1f)
-                                    .clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) }) {
+                                    .clickable { onIntent(ActivityIntent.OpenCarbonBatterySheet) } ) {
                                 CarbonCard(
                                     currentUsage = remainingInGrams.toFloat(), // Remaining emissions budget in grams
                                     totalCapacity = totalInGrams.toFloat() // Total emissions budget in grams
@@ -173,7 +175,6 @@ fun HomeScreen(
 
 
                 // 3. Metrics List
-                val sinceDate = TimeUtility.formatCommencementDate(deviceInfo.commencementDate)
                 MetricsList(
                     consumptionKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
                     avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
@@ -183,6 +184,45 @@ fun HomeScreen(
                     onCarbonIntensityClick = { onIntent(ActivityIntent.OpenCarbonIntensityMetricSheet) }
                 )
                 Spacer(modifier = Modifier.height(24.dp))
+            } ?: run {
+                // If no data and not loading, show error or placeholder
+                if (!state.isLoading) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(vertical = 80.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Rounded.CloudOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.material3.Text(
+                            text = if (state.error?.contains("Connect") == true) "No Internet Connection" else "No Data Available",
+                            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.material3.Text(
+                            text = state.error ?: "Connect to the internet to load device information for the first time.",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                        androidx.compose.material3.Button(
+                            onClick = { onIntent(ActivityIntent.RefreshData) }
+                        ) {
+                            androidx.compose.material3.Text("Try Again")
+                        }
+                    }
+                }
             }
 
         }
@@ -246,6 +286,22 @@ fun HomeScreen(
             onDismiss = { onIntent(ActivityIntent.DismissCarbonIntensityMetricSheet) },
             carbonIntensity = state.deviceInfo?.carbonInfo?.currentIntensity?.toInt() ?: state.carbonIntensity,
             sinceDate = sinceDate
+        )
+    }
+    
+    // WiFi Error Dialog
+    if (state.showWifiErrorDialog) {
+        WifiErrorDialog(
+            errorReason = state.wifiErrorReason,
+            errorDetails = state.wifiErrorDetails,
+            onDismiss = { onIntent(ActivityIntent.DismissWifiError) },
+            onOpenLocationSettings = { onIntent(ActivityIntent.OpenLocationSettings) },
+            onOpenWifiSettings = { onIntent(ActivityIntent.OpenWifiSettings) },
+            onContinueOffline = { onIntent(ActivityIntent.DismissWifiError) },
+            onRetry = { 
+                onIntent(ActivityIntent.ShowWifiError)
+                onIntent(ActivityIntent.RefreshData)
+            }
         )
     }
 }

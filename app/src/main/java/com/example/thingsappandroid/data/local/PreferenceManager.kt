@@ -1,9 +1,13 @@
 package com.example.thingsappandroid.data.local
 
 import android.content.Context
+import com.example.thingsappandroid.data.model.DeviceInfoResponse
+import com.example.thingsappandroid.data.model.StationInfo
+import com.google.gson.Gson
 
 class PreferenceManager(context: Context) {
     private val sharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    private val gson = Gson()
 
     fun isOnboardingCompleted(): Boolean {
         return sharedPreferences.getBoolean("onboarding_completed", false)
@@ -29,7 +33,7 @@ class PreferenceManager(context: Context) {
         sharedPreferences.edit().putString("theme_mode", mode).apply()
     }
 
-    /** API ClimateStatus (0–9). Used by BatteryService so notification matches home (Green / Align / Not green). */
+    /** API ClimateStatus (0–9). Used by BatteryService so notification matches home (Green / 1.5°C Aligned / Not green). */
     fun getClimateStatus(): Int? {
         val v = sharedPreferences.getInt("climate_status", -1)
         return if (v < 0) null else v
@@ -50,5 +54,69 @@ class PreferenceManager(context: Context) {
 
     fun setHasStation(hasStation: Boolean) {
         sharedPreferences.edit().putBoolean("has_station", hasStation).apply()
+    }
+
+    /** Saves the last loaded device info for offline use. */
+    fun saveDeviceInfo(deviceInfo: DeviceInfoResponse?) {
+        saveLastDeviceInfo(deviceInfo)
+    }
+
+    /** Saves the last loaded device info for offline use. */
+    fun saveLastDeviceInfo(deviceInfo: DeviceInfoResponse?) {
+        if (deviceInfo == null) {
+            sharedPreferences.edit().remove("last_device_info").apply()
+        } else {
+            sharedPreferences.edit()
+                .putString("last_device_info", gson.toJson(deviceInfo))
+                .apply()
+            
+            // Also save station info and carbon intensity if available
+            deviceInfo.stationInfo?.let { saveStationInfo(it) }
+            deviceInfo.carbonInfo?.let { saveCarbonIntensity(it.currentIntensity.toInt()) }
+        }
+    }
+
+    /** Returns the last saved device info, or null if never loaded. */
+    fun getLastDeviceInfo(): DeviceInfoResponse? {
+        val json = sharedPreferences.getString("last_device_info", null) ?: return null
+        return try {
+            gson.fromJson(json, DeviceInfoResponse::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveStationInfo(stationInfo: StationInfo?) {
+        if (stationInfo == null) {
+            sharedPreferences.edit().remove("station_info").apply()
+        } else {
+            sharedPreferences.edit().putString("station_info", gson.toJson(stationInfo)).apply()
+        }
+    }
+
+    fun getStationInfo(): StationInfo? {
+        val json = sharedPreferences.getString("station_info", null) ?: return null
+        return try {
+            gson.fromJson(json, StationInfo::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveStationCode(stationCode: String?) {
+        sharedPreferences.edit().putString("station_code", stationCode).apply()
+    }
+
+    fun getStationCode(): String? {
+        return sharedPreferences.getString("station_code", null)
+    }
+
+    fun saveCarbonIntensity(intensity: Int) {
+        sharedPreferences.edit().putInt("carbon_intensity", intensity).apply()
+    }
+
+    fun getCarbonIntensity(): Int? {
+        val v = sharedPreferences.getInt("carbon_intensity", -1)
+        return if (v < 0) null else v
     }
 }

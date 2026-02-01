@@ -88,6 +88,11 @@ dependencies {
     
     // Sentry
     implementation(libs.sentry.android)
+
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    kapt(libs.androidx.room.compiler)
 }
 
 sentry {

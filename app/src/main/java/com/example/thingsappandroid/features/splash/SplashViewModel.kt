@@ -59,10 +59,7 @@ class SplashViewModel @Inject constructor(
 
             // Check network connectivity first
             if (!NetworkUtils.isNetworkAvailable(getApplication())) {
-                Log.w("SplashViewModel", "No network connection available")
-                _effect.send(SplashEffect.ShowError("No internet connection. Please check your network settings."))
-                // Still navigate to home - user can retry later
-                delay(2000) // Show error message briefly
+                Log.w("SplashViewModel", "No network connection available - will use last saved device info if any")
                 _effect.send(SplashEffect.NavigateToHome)
                 return@launch
             }
@@ -76,19 +73,15 @@ class SplashViewModel @Inject constructor(
                 Log.d("SplashViewModel", "deviceId: $deviceId")
                 NetworkModule.setAuthToken(cachedToken)
                 
-                // Still register device to ensure it's synced (with network check)
-                try {
-                    val deviceInfo = repository.syncDeviceInfo(getApplication(), deviceId, null)
-                    val hasStation = deviceInfo?.stationInfo != null
-                    preferenceManager.setHasStation(hasStation)
-                    if (hasStation) {
-                        getApplication<Application>().sendBroadcast(
-                            android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.w("SplashViewModel", "Failed to sync device info: ${e.message}")
-                    // Continue anyway - token is valid
+                // Don't sync here - let HomeViewModel handle it on init to avoid duplicate calls
+                // Just check if we have station info from last saved data
+                val lastDeviceInfo = repository.getLastDeviceInfo()
+                val hasStation = lastDeviceInfo?.stationInfo != null
+                preferenceManager.setHasStation(hasStation)
+                if (hasStation) {
+                    getApplication<Application>().sendBroadcast(
+                        android.content.Intent("com.example.thingsappandroid.HAS_STATION_UPDATED")
+                    )
                 }
                 
                 _effect.send(SplashEffect.NavigateToHome)

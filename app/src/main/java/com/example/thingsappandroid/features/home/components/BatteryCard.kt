@@ -17,10 +17,12 @@ import java.util.Locale
 @Composable
 fun BatteryCard(
     modifier: Modifier = Modifier,
-    batteryLevel: Float = 0.84f,
-    isCharging: Boolean = true,
+    batteryLevel: Float = -1f, // -1 means unknown/not loaded
+    isCharging: Boolean = false,
     batteryCapacityMwh: Int? = null
 ) {
+    // Determine if we have valid battery data
+    val hasValidData = batteryLevel >= 0f
     Card(
         modifier = modifier.height(163.dp),
         shape = Shapes.medium,
@@ -55,15 +57,17 @@ fun BatteryCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "${(batteryLevel * 100).toInt()}%",
-                        style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
+                        text = if (hasValidData) "${(batteryLevel * 100).toInt()}%" else "--",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = if (hasValidData) Gray800 else Gray400
+                        )
                     )
                     HorizontalDivider(color = Gray300, thickness = 1.dp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (isCharging) {
+                        if (isCharging && hasValidData) {
                             Icon(
                                 imageVector = Icons.Default.Bolt,
                                 contentDescription = "Charging",
@@ -72,9 +76,17 @@ fun BatteryCard(
                             )
                         }
                         Text(
-                            text = if (isCharging) "Charging" else "On Battery",
+                            text = when {
+                                !hasValidData -> "Loading..."
+                                isCharging -> "Charging"
+                                else -> "On Battery"
+                            },
                             style = MaterialTheme.typography.labelSmall.copy(
-                                color = if (isCharging) BatteryYellow else Gray500,
+                                color = when {
+                                    !hasValidData -> Gray400
+                                    isCharging -> BatteryYellow
+                                    else -> Gray500
+                                },
                                 fontWeight = FontWeight.SemiBold
                             )
                         )

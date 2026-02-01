@@ -1,8 +1,10 @@
 package com.example.thingsappandroid.di
 
 import android.content.Context
+import com.example.thingsappandroid.data.local.AppDatabase
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
+import com.example.thingsappandroid.data.local.dao.ConsumptionDao
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import dagger.Module
 import dagger.Provides
@@ -29,7 +31,22 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideThingsRepository(): ThingsRepository {
-        return ThingsRepository()
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        return AppDatabase.getInstance(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideConsumptionDao(database: AppDatabase): ConsumptionDao {
+        return database.consumptionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideThingsRepository(
+        consumptionDao: ConsumptionDao,
+        preferenceManager: PreferenceManager
+    ): ThingsRepository {
+        return ThingsRepository(consumptionDao, preferenceManager)
     }
 }

@@ -27,9 +27,13 @@ data class RegisterDeviceRequest(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("Name") val name: String,
     @SerializedName("Make") val make: String,
+    @SerializedName("Model") val model: String? = null,
     @SerializedName("OS") val os: String,
     @SerializedName("Category") val category: String,
-    @SerializedName("SerialNumber") val serialNumber: String
+    @SerializedName("SerialNumber") val serialNumber: String,
+    @SerializedName("WiFiAddress") val wifiAddress: String? = null,
+    @SerializedName("Latitude") val latitude: Double? = null,
+    @SerializedName("Longitude") val longitude: Double? = null
 )
 
 /** getdeviceinfo does not use latitude/longitude. */
@@ -37,7 +41,9 @@ data class DeviceInfoRequest(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("StationCode") val stationCode: String? = null,
     @SerializedName("WiFiAddress") val wifiAddress: String? = null,
-    @SerializedName("CurrentVersion") val currentVersion: String? = null
+    @SerializedName("CurrentVersion") val currentVersion: String? = null,
+    @SerializedName("Latitude") val latitude: Double? = null,
+    @SerializedName("Longitude") val longitude: Double? = null
 )
 
 data class AndroidMeasurementRequest(
@@ -112,10 +118,17 @@ data class SetClimateStatusRequest(
     @SerializedName("deviceId") val deviceId: String,
     @SerializedName("latitude") val latitude: Double,
     @SerializedName("longitude") val longitude: Double,
-    @SerializedName("wiFiAddress") val wiFiAddress: String
+    @SerializedName("wiFiAddress") val wiFiAddress: String,
+    @SerializedName("stationCode") val stationCode: String? = null
 )
 
-data class GetGreenFiInfoRequest(@SerializedName("WiFiAddress") val wifiAddress: String)
+data class GetGreenFiInfoRequest(
+    @SerializedName("DeviceId") val deviceId: String,
+    @SerializedName("WiFiAddress") val wifiAddress: String,
+    @SerializedName("Latitude") val latitude: Double? = null,
+    @SerializedName("Longitude") val longitude: Double? = null
+)
+
 data class GetLatestIntensityRequest(@SerializedName("Latitude") val lat: Double, @SerializedName("Longitude") val lon: Double)
 data class SetDeviceAliasRequest(@SerializedName("DeviceId") val deviceId: String, @SerializedName("Alias") val alias: String)
 data class SetStationRequest(
@@ -174,11 +187,13 @@ data class DeviceInfoResponse(
 data class StationInfo(
     @SerializedName("StationName") val stationName: String?,
     @SerializedName("StationId") val stationId: String?,
+    @SerializedName("StationCode") val stationCode: String? = null,
     @SerializedName("IsGreen") val isGreen: Boolean?,
     @SerializedName("ClimateStatus") val climateStatus: String?, // Enum
     @SerializedName("Country") val country: String?,
     @SerializedName("UtilityName") val utilityName: String?,
-    @SerializedName("WiFiAddress") val wifiAddress: String?
+    @SerializedName("WiFiAddress") val wifiAddress: String?,
+    @SerializedName("CFEScore") val cfeScore: Double? = null
 )
 
 data class OrganizationInfo(
@@ -208,7 +223,10 @@ data class LatestIntensityResponse(
 
 data class MeasurementResponse(val measurementId: String)
 data class BasicResponse(val success: Boolean)
-data class GreenFiInfoResponse(@SerializedName("isGreen") val isGreen: Boolean)
+data class GreenFiInfoResponse(
+    @SerializedName("isGreen") val isGreen: Boolean,
+    @SerializedName("StationInfo") val stationInfo: StationInfo? = null
+)
 
 data class ClimateStatusResponse(@SerializedName("ClimateStatus") val climateStatus: String)
 
@@ -217,14 +235,14 @@ data class SetClimateStatusResponse(
 )
 
 data class SetClimateStatusData(
-    val isAssociated: Boolean,
-    val stationCode: String?,
-    val stationId: String?,
-    val organizationId: String?,
-    val userId: String?,
-    val isGreen: Boolean,
-    val climateStatus: String,
-    val message: String?
+    @SerializedName("IsAssociated") val isAssociated: Boolean,
+    @SerializedName("StationCode") val stationCode: String?,
+    @SerializedName("StationId") val stationId: String?,
+    @SerializedName("OrganizationId") val organizationId: String?,
+    @SerializedName("UserId") val userId: String?,
+    @SerializedName("IsGreen") val isGreen: Boolean,
+    @SerializedName("ClimateStatus") val climateStatus: Int?, // API returns Int, not String
+    @SerializedName("Message") val message: String?
 )
 
 data class AppItemResponse(

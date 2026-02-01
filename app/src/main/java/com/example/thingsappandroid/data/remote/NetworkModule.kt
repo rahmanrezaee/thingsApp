@@ -57,4 +57,8 @@ object NetworkModule {
             .build()
             .create(ThingsApiService::class.java)
     }
+
+    fun provideThingsApiService(context: android.content.Context): ThingsApiService {
+        return api
+    }
 }

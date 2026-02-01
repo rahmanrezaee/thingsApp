@@ -1,19 +1,28 @@
 package com.example.thingsappandroid.features
 
+import android.content.Intent
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.thingsappandroid.features.home.components.HomeBottomBar
 import com.example.thingsappandroid.features.home.screens.HomeScreen
@@ -27,11 +36,12 @@ import com.example.thingsappandroid.features.home.components.StationCodeBottomSh
 @Composable
 fun MainScreen(
     navController: NavController,
-    homeViewModel: HomeViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
+    homeViewModel: HomeViewModel = hiltViewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
     val state by homeViewModel.state.collectAsState()
     val currentTab = state.selectedBottomTabIndex
     val context = LocalContext.current
+    var showLocationDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         homeViewModel.effect.collect { effect ->
@@ -50,8 +60,44 @@ fun MainScreen(
                 is ActivityEffect.StationUpdateError -> {
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
                 }
+                is ActivityEffect.RequestEnableLocation -> {
+                    showLocationDialog = true
+                }
             }
         }
+    }
+
+    // Location Enable Dialog
+    if (showLocationDialog || state.showLocationEnableDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showLocationDialog = false
+                homeViewModel.dispatch(ActivityIntent.SkipLocationRequest)
+            },
+            title = { Text("Location Services Required") },
+            text = { Text("Please enable location services to use this app. Location is required for accurate carbon tracking and WiFi identification.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLocationDialog = false
+                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showLocationDialog = false
+                        homeViewModel.dispatch(ActivityIntent.SkipLocationRequest)
+                    }
+                ) {
+                    Text("Skip")
+                }
+            }
+        )
     }
 
     Scaffold(

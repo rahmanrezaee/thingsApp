@@ -8,11 +8,13 @@ import android.provider.Settings
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
+import javax.inject.Inject
 
 data class AuthorizeUiState(
     val isInitializing: Boolean = true,
@@ -22,8 +24,11 @@ data class AuthorizeUiState(
     val isInitialized: Boolean = false
 )
 
-class AuthorizeViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = ThingsRepository()
+@HiltViewModel
+class AuthorizeViewModel @Inject constructor(
+    application: Application,
+    private val repository: ThingsRepository
+) : AndroidViewModel(application) {
     private val tokenManager = TokenManager(application)
     
     private val _uiState = MutableStateFlow(AuthorizeUiState())

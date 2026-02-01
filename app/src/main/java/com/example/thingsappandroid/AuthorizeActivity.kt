@@ -19,7 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.thingsappandroid.features.auth.screens.AuthorizeScreen
 import com.example.thingsappandroid.features.auth.viewModel.AuthorizeViewModel
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
@@ -34,6 +34,7 @@ import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
  * - Doesn't appear in recent apps
  * - Auto-finishes after authorization/denial
  */
+@dagger.hilt.android.AndroidEntryPoint
 class AuthorizeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +73,7 @@ class AuthorizeActivity : ComponentActivity() {
 
         setContent {
             ThingsAppAndroidTheme {
-                val authorizeViewModel: AuthorizeViewModel = viewModel()
+                val authorizeViewModel: AuthorizeViewModel = hiltViewModel()
                 val state by authorizeViewModel.uiState.collectAsState()
 
                 // Handle back button press

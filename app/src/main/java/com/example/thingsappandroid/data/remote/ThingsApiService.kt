@@ -76,5 +76,5 @@ interface ThingsApiService {
     suspend fun addDeviceConsumption(@Body request: AndroidMeasurementModel): Response<MeasurementResponse>
 
     @POST("/v4/androidapp/adddeviceconsumptionrange")
-    suspend fun addDeviceConsumptionRange(@Body request: List<AndroidMeasurementModel>): Response<BasicResponse>
+    suspend fun addDeviceConsumptionRange(@Body request: List<AndroidMeasurementModel>): Response<ResponseBody> // API returns [] on success
 }

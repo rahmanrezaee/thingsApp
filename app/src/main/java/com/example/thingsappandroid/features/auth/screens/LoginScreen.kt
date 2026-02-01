@@ -38,7 +38,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.features.auth.viewModel.AuthViewModel
 import com.example.thingsappandroid.ui.components.CustomTextField
@@ -54,7 +54,7 @@ import com.example.thingsappandroid.features.auth.viewModel.AuthIntent
 
 @Composable
 fun LoginScreen() {
-    val viewModel: AuthViewModel = viewModel()
+    val viewModel: AuthViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
