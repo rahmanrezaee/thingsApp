@@ -12,92 +12,55 @@ import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
-import kotlinx.coroutines.delay
 
 /**
- * Manages climate status operations including:
- * - Setting climate status when charging starts
- * - Getting device info
- * - Validating WiFi and location availability
+ * Manages climate status API calls when charging starts.
+ * Caller (BatteryService) must ensure WiFi and location are available before calling.
  */
 class ClimateStatusManager(private val context: Context) {
-    
+
     private val TAG = "ClimateStatusManager"
-    
+
     /**
-     * Handle charging started event
+     * Calls SetClimateStatus then GetDeviceInfo. Updates preferences with result.
+     * Caller should only invoke when wifi+location are ready.
      *
-     * @param onLocationError Callback when location is unavailable – invoked with (reason, details, isPermissionDenied, isServicesDisabled)
-     * @return Climate status if successful, null otherwise
+     * @return Climate status from API if successful, null otherwise
      */
     suspend fun handleChargingStarted(
         onLocationError: ((reason: String, details: String, isPermissionDenied: Boolean, isServicesDisabled: Boolean) -> Unit)? = null
     ): Int? {
         return try {
-            delay(2000) // Wait for system to stabilize
-            
             val deviceId = DeviceUtils.getStoredDeviceId(context)
-            
-            // CRITICAL: Check WiFi and Location availability FIRST
-            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(
-                context,
-                maxRetries = 3,
-                delayMs = 1500L
-            )
-            
-            // Check location services status first
-            val hasLocationPermission = LocationUtils.hasLocationPermission(context)
-            val isLocationEnabled = LocationUtils.isLocationEnabled(context)
-            
-            val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
-            val hasValidLocation = latitude != 0.0 || longitude != 0.0
-            
-            // Validate availability
-            if (!wifiResult.success) {
-                Log.w(TAG, "⚠️ WiFi BSSID not available: ${wifiResult.errorReason}")
-                Log.w(TAG, "Details: ${wifiResult.errorDetails}")
-                
-                // Broadcast WiFi error to HomeViewModel
-                val errorIntent = Intent("com.example.thingsappandroid.WIFI_STATUS_CHANGED").apply {
-                    putExtra("is_connected", false)
-                    putExtra("error_reason", wifiResult.errorReason)
-                    putExtra("error_details", wifiResult.errorDetails)
-                }
-                context.sendBroadcast(errorIntent)
+            if (deviceId == null) {
+                Log.w(TAG, "handleChargingStarted skipped: no deviceId")
                 return null
             }
-            
-            // Check location availability and broadcast specific error
-            if (!hasLocationPermission || !isLocationEnabled || !hasValidLocation) {
-                val errorReason = when {
-                    !hasLocationPermission -> "Location permission denied"
-                    !isLocationEnabled -> "Location services disabled"
-                    !hasValidLocation -> "Unable to get location coordinates"
-                    else -> "Location not available"
-                }
-                val errorDetails = when {
-                    !hasLocationPermission -> "Please grant location permission in app settings to enable carbon tracking."
-                    !isLocationEnabled -> "Please enable location services (GPS) in your device settings. Location is required for WiFi identification and carbon tracking."
-                    !hasValidLocation -> "Unable to retrieve your current location. Please check your GPS signal."
-                    else -> "Location services are not available."
-                }
-                
-                Log.w(TAG, "⚠️ Location not available: $errorReason")
+            if (NetworkModule.getAuthToken().isNullOrBlank()) {
+                Log.d(TAG, "handleChargingStarted skipped: no auth token")
+                return null
+            }
+
+            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(context, maxRetries = 3, delayMs = 1500L)
+            if (!wifiResult.success || wifiResult.bssid == null) {
+                Log.w(TAG, "WiFi BSSID not available: ${wifiResult.errorReason}")
+                return null
+            }
+
+            val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
+            val hasLocationPermission = LocationUtils.hasLocationPermission(context)
+            val isLocationEnabled = LocationUtils.isLocationEnabled(context)
+            if (!hasLocationPermission || !isLocationEnabled) {
                 onLocationError?.invoke(
-                    errorReason,
-                    errorDetails,
+                    if (!hasLocationPermission) "Location permission denied" else "Location services disabled",
+                    "Location required for carbon tracking.",
                     !hasLocationPermission,
                     !isLocationEnabled
                 )
                 return null
             }
-            
-            val currentWifiAddress = wifiResult.bssid
-            Log.d(TAG, "✅ WiFi & Location available - WiFi: ${currentWifiAddress?.take(10)}..., Location: ($latitude, $longitude)")
-            
-            // Call SetClimateStatus
-            setClimateStatusOnChargingStart(deviceId, currentWifiAddress)
-            
+
+            setClimateStatusOnChargingStart(deviceId, wifiResult.bssid)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling charging event: ${e.message}", e)
             Sentry.withScope { scope ->
