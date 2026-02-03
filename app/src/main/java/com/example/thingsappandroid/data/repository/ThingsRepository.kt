@@ -159,6 +159,10 @@ class ThingsRepository(
                     }
 
                     val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
+                    if (wifiAddress.isNullOrBlank()) {
+                        Log.d("ThingsRepo", "WiFi address missing - not sending getDeviceInfo request")
+                        return@withContext getLastDeviceInfo()
+                    }
                     val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
                     val request = DeviceInfoRequest(deviceId, stationCode, wifiAddress, null, latitude, longitude)
                     val infoResponse = api.getDeviceInfo(request)

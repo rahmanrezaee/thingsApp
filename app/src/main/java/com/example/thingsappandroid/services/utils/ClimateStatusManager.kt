@@ -114,8 +114,8 @@ class ClimateStatusManager(private val context: Context) {
                 Log.w(TAG, "setClimateStatus failed: ${response?.code() ?: "timeout"}")
             }
 
-            // Call GetDeviceInfo
-            getDeviceInfoOnChargingStart(deviceId, wiFiAddress)
+            // Call GetDeviceInfo (wiFiAddress is mandatory; we already checked !wiFiAddress.isNullOrBlank())
+            getDeviceInfoOnChargingStart(deviceId!!, wiFiAddress!!)
             
         } catch (e: Exception) {
             Log.e(TAG, "setClimateStatus error: ${e.message}", e)

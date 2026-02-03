@@ -36,11 +36,11 @@ data class RegisterDeviceRequest(
     @SerializedName("Longitude") val longitude: Double? = null
 )
 
-/** getdeviceinfo does not use latitude/longitude. */
+/** getdeviceinfo does not use latitude/longitude. WiFiAddress is mandatory – do not send request without it. */
 data class DeviceInfoRequest(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("StationCode") val stationCode: String? = null,
-    @SerializedName("WiFiAddress") val wifiAddress: String? = null,
+    @SerializedName("WiFiAddress") val wifiAddress: String,
     @SerializedName("CurrentVersion") val currentVersion: String? = null,
     @SerializedName("Latitude") val latitude: Double? = null,
     @SerializedName("Longitude") val longitude: Double? = null

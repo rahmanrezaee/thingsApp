@@ -46,7 +46,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     application: Application,
     private val tokenManager: TokenManager,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    private val repository: ThingsRepository
 ) : AndroidViewModel(application) {
 
     // MVI State
@@ -163,7 +164,6 @@ class HomeViewModel @Inject constructor(
                 }
             }
             ActivityIntent.SkipLocationRequest -> {
-                // User skipped location request - load cached data and don't ask again
                 _state.update {
                     it.copy(
                         showLocationEnableDialog = false,
@@ -171,38 +171,8 @@ class HomeViewModel @Inject constructor(
                         pendingDeviceInfoLoad = false
                     )
                 }
-                // Load cached data only
                 viewModelScope.launch {
-                    val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
-                    if (cachedDeviceInfo != null) {
-                        Log.d("ActivityViewModel", "Loading cached device info (location skipped)")
-                        val mappedClimate = cachedDeviceInfo.climateStatus?.let { statusInt ->
-                            ClimateUtils.getMappedClimateData(statusInt)
-                        } ?: ClimateUtils.getMappedClimateData(null as String?)
-
-                        _state.update {
-                            it.copy(
-                                deviceInfo = cachedDeviceInfo,
-                                avoidedEmissions = cachedDeviceInfo.totalAvoided?.toFloat() ?: 0f,
-                                totalConsumedKwh = cachedDeviceInfo.totalConsumed?.toFloat() ?: 0f,
-                                carbonIntensity = cachedDeviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
-                                stationInfo = cachedDeviceInfo.stationInfo,
-                                stationName = cachedDeviceInfo.stationInfo?.stationName,
-                                isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
-                                climateData = mappedClimate,
-                                isLoading = false,
-                                error = null
-                            )
-                        }
-                    } else {
-                        // No cached data - show error
-                        _state.update {
-                            it.copy(
-                                isLoading = false,
-                                error = "Location is required for fresh data. Enable location to get latest information."
-                            )
-                        }
-                    }
+                    loadCachedOrDefaultDeviceInfo()
                 }
             }
             ActivityIntent.ShowWifiError, ActivityIntent.DismissWifiError,
@@ -213,15 +183,16 @@ class HomeViewModel @Inject constructor(
     }
     
     /**
-     * Checks if location is enabled before loading device info.
-     * Location dialog is shown on SplashScreen; here we only load cached if skipped or location off.
+     * Checks WiFi and location. If user is not on WiFi or does not enable location:
+     * - Check local DB for existing device info → if exists, load and display.
+     * - If no data exists → create default record (ClimateStatus 8, carbon 100% 500g, grid 485 gCO₂e) and display.
+     * Otherwise load from API.
      */
     private fun checkLocationAndLoadDeviceInfo() {
         val locationEnabled = isLocationEnabled()
-        val skipped = _state.value.locationRequestSkipped || preferenceManager.getLocationRequestSkipped()
+        val wifiConnected = isWiFiConnected()
 
-        if (locationEnabled) {
-            // Location is enabled - proceed with fresh data load
+        if (wifiConnected && locationEnabled) {
             _state.update {
                 it.copy(
                     isLocationEnabled = true,
@@ -233,35 +204,60 @@ class HomeViewModel @Inject constructor(
                 loadDeviceInfoWithRetry()
             }
         } else {
-            // Location disabled - show cached if any, else try API once (first-time load)
-            Log.d("ActivityViewModel", "Location disabled - loading cached or fetching once")
+            // No WiFi or no location: use local DB or create default
+            Log.d("ActivityViewModel", "No WiFi or location - loading from local DB or creating default")
             viewModelScope.launch {
-                val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
-                if (cachedDeviceInfo != null) {
-                    val mappedClimate = cachedDeviceInfo.climateStatus?.let { statusInt ->
-                        ClimateUtils.getMappedClimateData(statusInt)
-                    } ?: ClimateUtils.getMappedClimateData(null as String?)
-
-                    _state.update {
-                        it.copy(
-                            deviceInfo = cachedDeviceInfo,
-                            avoidedEmissions = cachedDeviceInfo.totalAvoided?.toFloat() ?: 0f,
-                            totalConsumedKwh = cachedDeviceInfo.totalConsumed?.toFloat() ?: 0f,
-                            carbonIntensity = cachedDeviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
-                            stationInfo = cachedDeviceInfo.stationInfo,
-                            stationName = cachedDeviceInfo.stationInfo?.stationName,
-                            isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
-                            climateData = mappedClimate,
-                            isLoading = false,
-                            error = null,
-                            locationRequestSkipped = true
-                        )
-                    }
-                } else {
-                    _state.update { it.copy(locationRequestSkipped = true) }
-                    loadDeviceInfoWithRetry()
-                }
+                loadCachedOrDefaultDeviceInfo()
             }
+        }
+    }
+
+    private fun isWiFiConnected(): Boolean {
+        val cm = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        } else {
+            @Suppress("DEPRECATION")
+            val ni = cm.activeNetworkInfo
+            ni?.type == ConnectivityManager.TYPE_WIFI && ni.isConnected
+        }
+    }
+
+    /**
+     * Load device info from local DB; if none, create default (ClimateStatus 8, carbon 100% 500g, grid 485 gCO₂e) and save.
+     */
+    private suspend fun loadCachedOrDefaultDeviceInfo() {
+        val deviceId = getDeviceId()
+        val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
+        val deviceInfo = if (cachedDeviceInfo != null) {
+            Log.d("ActivityViewModel", "Loading cached device info")
+            cachedDeviceInfo
+        } else {
+            Log.d("ActivityViewModel", "No cached data - creating default device info")
+            val defaultInfo = repository.createDefaultDeviceInfo(deviceId)
+            preferenceManager.saveLastDeviceInfo(defaultInfo)
+            defaultInfo
+        }
+        val mappedClimate = deviceInfo.climateStatus?.let { statusInt ->
+            ClimateUtils.getMappedClimateData(statusInt)
+        } ?: ClimateUtils.getMappedClimateData(null as String?)
+        _state.update {
+            it.copy(
+                deviceInfo = deviceInfo,
+                avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
+                totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
+                carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                stationInfo = deviceInfo.stationInfo,
+                stationName = deviceInfo.stationInfo?.stationName,
+                isGreenStation = deviceInfo.stationInfo?.isGreen == true,
+                climateData = mappedClimate,
+                isLoading = false,
+                error = null,
+                locationRequestSkipped = true,
+                deviceName = deviceInfo.alias ?: Build.MODEL
+            )
         }
     }
 
@@ -363,6 +359,12 @@ class HomeViewModel @Inject constructor(
             val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
             val station = _state.value.stationCode
             Pair(wifi, station)
+        }
+
+        if (wifiAddress.isNullOrBlank()) {
+            Log.d("ActivityViewModel", "WiFi address missing - not sending getDeviceInfo request")
+            loadCachedOrDefaultDeviceInfo()
+            return
         }
 
         try {
@@ -469,6 +471,12 @@ class HomeViewModel @Inject constructor(
                     Pair(wifi, station)
                 }
 
+                if (wifiAddress.isNullOrBlank()) {
+                    Log.d("ActivityViewModel", "WiFi address missing - not sending getDeviceInfo request")
+                    loadCachedOrDefaultDeviceInfo()
+                    return
+                }
+
                 val response = withContext(Dispatchers.IO) {
                     NetworkModule.api.getDeviceInfo(
                         DeviceInfoRequest(
@@ -563,13 +571,8 @@ class HomeViewModel @Inject constructor(
             }
         }
         
-        // All retries failed
-        _state.update {
-            it.copy(
-                isLoading = false,
-                error = lastError ?: "Failed to load device info after $maxRetries attempts"
-            )
-        }
+        // All retries failed - fall back to cache or default so home still shows data
+        loadCachedOrDefaultDeviceInfo()
     }
 
     /**
@@ -676,12 +679,13 @@ class HomeViewModel @Inject constructor(
                         isGreenStation = cachedDeviceInfo.stationInfo?.isGreen == true,
                         climateData = mappedClimate,
                         isLoading = true, // Still show loading while we refresh
-                        error = null
+                        error = null,
+                        deviceName = cachedDeviceInfo.alias ?: Build.MODEL
                     )
                 }
             }
             
-            // Then check location and refresh from API
+            // Then check WiFi/location and refresh from API or use cache/default
             checkLocationAndLoadDeviceInfo()
         }
 
