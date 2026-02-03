@@ -3,10 +3,14 @@ package com.example.thingsappandroid.features.home.viewModel
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.location.LocationManager
 import android.os.Build
@@ -56,10 +60,17 @@ class HomeViewModel @Inject constructor(
     // Cached Device ID
     private var cachedDeviceId: String? = null
 
+    // Last known WiFi BSSID - when it changes, we refresh device info
+    private var lastKnownWifiBssid: String? = null
+
     // Periodic battery update job
     private var batteryUpdateJob: kotlinx.coroutines.Job? = null
 
+    private var wifiBroadcastReceiver: BroadcastReceiver? = null
+
     init {
+        lastKnownWifiBssid = preferenceManager.getLastWifiBssid()
+        registerWifiChangeReceiver()
         dispatch(ActivityIntent.Initialize)
     }
 
@@ -356,7 +367,6 @@ class HomeViewModel @Inject constructor(
 
         try {
             Log.d("ActivityViewModel", "WiFi Address: $wifiAddress, Station Code: $stationCode")
-            
             val response = withContext(Dispatchers.IO) {
                 NetworkModule.api.getDeviceInfo(
                     DeviceInfoRequest(
@@ -389,8 +399,6 @@ class HomeViewModel @Inject constructor(
                     ClimateUtils.getMappedClimateData(statusInt)
                 } ?: ClimateUtils.getMappedClimateData(null as String?)
 
-                preferenceManager.saveClimateStatus(deviceInfo.climateStatus)
-
                 val hasStation = deviceInfo.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
                 getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
@@ -410,6 +418,9 @@ class HomeViewModel @Inject constructor(
                 }
                 // Save to cache for next time
                 preferenceManager.saveLastDeviceInfo(deviceInfo)
+                // Save BSSID so we can detect WiFi changes and refresh when needed
+                lastKnownWifiBssid = wifiAddress
+                preferenceManager.saveLastWifiBssid(wifiAddress)
             } else {
                 Log.d("ActivityViewModel", "Error: ${response.code()}")
                 _state.update {
@@ -495,8 +506,6 @@ class HomeViewModel @Inject constructor(
                         ClimateUtils.getMappedClimateData(statusInt)
                     } ?: ClimateUtils.getMappedClimateData(null as String?)
 
-                    preferenceManager.saveClimateStatus(deviceInfo.climateStatus)
-
                     val hasStation = deviceInfo.stationInfo != null
                     preferenceManager.setHasStation(hasStation)
                     getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
@@ -516,6 +525,9 @@ class HomeViewModel @Inject constructor(
                     }
                     // Save to cache for next time
                     preferenceManager.saveLastDeviceInfo(deviceInfo)
+                    // Save BSSID so we can detect WiFi changes and refresh when needed
+                    lastKnownWifiBssid = wifiAddress
+                    preferenceManager.saveLastWifiBssid(wifiAddress)
                     Log.d("ActivityViewModel", "Device info loaded successfully on attempt ${retryCount + 1} and saved to cache")
                     return // Success - exit retry loop
                 } else {
@@ -734,9 +746,62 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Registers a BroadcastReceiver to listen for WiFi/network changes.
+     * When BSSID changes, triggers a device info refresh.
+     */
+    private fun registerWifiChangeReceiver() {
+        if (wifiBroadcastReceiver != null) return
+        wifiBroadcastReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                viewModelScope.launch {
+                    checkWifiAndRefreshIfNeeded()
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
+        }
+        val app = getApplication<Application>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.registerReceiver(app, wifiBroadcastReceiver!!, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } else {
+            app.registerReceiver(wifiBroadcastReceiver, filter)
+        }
+        Log.d("HomeViewModel", "WiFi change receiver registered")
+    }
+
+    private fun unregisterWifiChangeReceiver() {
+        wifiBroadcastReceiver?.let { receiver ->
+            try {
+                getApplication<Application>().unregisterReceiver(receiver)
+                Log.d("HomeViewModel", "WiFi change receiver unregistered")
+            } catch (e: Exception) {
+                Log.w("HomeViewModel", "Error unregistering WiFi receiver: ${e.message}")
+            }
+            wifiBroadcastReceiver = null
+        }
+    }
+
+    /**
+     * Checks if WiFi BSSID has changed. If so, triggers device info refresh.
+     * Called on WiFi broadcast and on app resume.
+     */
+    private suspend fun checkWifiAndRefreshIfNeeded() {
+        val currentBssid = withContext(Dispatchers.IO) {
+            WifiUtils.getHashedWiFiBSSID(getApplication())
+        }
+        if (currentBssid != lastKnownWifiBssid) {
+            Log.d("HomeViewModel", "WiFi BSSID changed: $lastKnownWifiBssid -> $currentBssid, refreshing device info")
+            checkLocationAndLoadDeviceInfo()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
-        // Cancel periodic battery updates
+        unregisterWifiChangeReceiver()
         batteryUpdateJob?.cancel()
         batteryUpdateJob = null
         Log.d("HomeViewModel", "Periodic battery updates cancelled")

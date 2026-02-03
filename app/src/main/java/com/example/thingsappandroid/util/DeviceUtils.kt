@@ -1,29 +1,24 @@
 package com.example.thingsappandroid.util
 
+import android.annotation.SuppressLint
 import android.content.Context
+import android.provider.Settings
 import android.util.Log
-import com.example.thingsappandroid.data.local.PreferenceManager
-import com.example.thingsappandroid.data.local.TokenManager
 
 object DeviceUtils {
     private const val TAG = "DeviceUtils"
 
     /**
-     * Gets the stored device ID from TokenManager first, then falls back to PreferenceManager.
-     * 
+     * Returns the device ID using Settings.Secure.ANDROID_ID (no store).
+     *
      * @param context The application context
-     * @return The device ID string, or null if not found
+     * @return The Android ID string, or null if unavailable
      */
+    @SuppressLint("HardwareIds")
     fun getStoredDeviceId(context: Context): String? {
         return try {
-            val tokenManager = TokenManager(context)
-            val deviceId = tokenManager.getDeviceId()
-            if (!deviceId.isNullOrEmpty()) {
-                deviceId
-            } else {
-                val preferenceManager = PreferenceManager(context)
-                preferenceManager.getDeviceId()
-            }
+            val id = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            if (!id.isNullOrEmpty()) id else null
         } catch (e: Exception) {
             Log.e(TAG, "Error getting device ID: ${e.message}")
             null

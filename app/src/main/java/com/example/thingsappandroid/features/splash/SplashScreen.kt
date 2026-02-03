@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.components.PrimaryButton
 import com.example.thingsappandroid.ui.theme.BackgroundWhite
@@ -34,11 +35,12 @@ import com.example.thingsappandroid.ui.theme.TextSecondary
 
 @Composable
 fun SplashScreen(
-    showLocationDialog: Boolean = false,
-    onLocationOpenSettings: () -> Unit = {},
-    onLocationSkip: () -> Unit = {},
+    showBackgroundLocationDialog: Boolean = false,
+    onBackgroundLocationOpenSettings: () -> Unit = {},
+    onBackgroundLocationSkip: () -> Unit = {},
     hasRequiredPermissions: Boolean = true,
-    onGrantPermissions: () -> Unit = {}
+    onGrantPermissions: () -> Unit = {},
+    hasBackgroundLocation: Boolean = false
 ) {
     Box(
         modifier = Modifier
@@ -67,33 +69,41 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (!hasRequiredPermissions) {
+            if (!hasRequiredPermissions || !hasBackgroundLocation) {
                 Text(
-                    text = "Required Permissions",
+                    text = "⚠️ Required Permissions",
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = TextPrimary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "To provide the best charging experience, we need access to your Location and Notifications.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    text = "ThingsApp REQUIRES Location (\"Allow all the time\") and Notification permissions to function properly.",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextPrimary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "• Location: Used to show local carbon intensity.\n• Notifications: Used for real-time charging status updates.",
+                    text = "These permissions enable:\n• Automatic charging session tracking\n• WiFi-based green energy monitoring\n• Real-time updates even when app is closed\n• Accurate carbon footprint calculations",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "📍 Permission process (2 steps):\n1. First: Grant location permission\n2. Then: Enable \"Allow all the time\" in Settings",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(40.dp))
                 PrimaryButton(
                     modifier = Modifier.fillMaxWidth(),
-                    text = "Grant Permissions",
+                    text = "Continue",
                     onClick = onGrantPermissions
                 )
             } else {
@@ -105,25 +115,54 @@ fun SplashScreen(
         }
     }
 
-    if (showLocationDialog) {
+    // Background location permission dialog - MANDATORY (permission only, not "enable location")
+    if (showBackgroundLocationDialog) {
         AlertDialog(
-            onDismissRequest = onLocationSkip,
-            title = { Text("Location Services Required") },
-            text = {
+            onDismissRequest = { /* Prevent dismissal - permission is mandatory */ },
+            title = { 
                 Text(
-                    "Please enable location services to use this app. Location is required for accurate carbon tracking and WiFi identification."
-                )
+                    "⚠️ Required Permission",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                ) 
+            },
+            text = {
+                Column {
+                    Text(
+                        "Background location access is REQUIRED for ThingsApp to function properly.",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Why it's needed:\n• Track charging sessions automatically\n• Monitor WiFi-based green energy usage\n• Provide accurate carbon footprint data",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Steps to enable:\n1. Tap \"Open Settings\" below\n2. Go to Permissions → Location\n3. Select \"Allow all the time\"",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "The app cannot proceed without this permission.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             },
             confirmButton = {
-                Button(onClick = onLocationOpenSettings) {
+                Button(
+                    onClick = onBackgroundLocationOpenSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Open Settings")
                 }
             },
-            dismissButton = {
-                TextButton(onClick = onLocationSkip) {
-                    Text("Skip")
-                }
-            }
+            dismissButton = null, // Remove skip button - permission is mandatory
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
         )
     }
 }

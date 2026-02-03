@@ -70,6 +70,14 @@ object WifiUtils {
         return try {
             // Check location permission (required for BSSID access on Android 10+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Also check background location permission for background WiFi access
+                val hasBgLoc = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!hasBgLoc) {
+                    Log.w(TAG, "ACCESS_BACKGROUND_LOCATION not granted - WiFi info may be masked in background")
+                }
                 val hasFineLocation = ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.ACCESS_FINE_LOCATION

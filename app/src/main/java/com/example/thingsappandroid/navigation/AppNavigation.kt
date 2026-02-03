@@ -93,19 +93,110 @@ fun AppNavigation(modifier: Modifier = Modifier) {
     ) {
         composable("splash_route") {
             val splashViewModel: SplashViewModel = hiltViewModel()
-            var showLocationDialog by remember { mutableStateOf(false) }
+            var showBackgroundLocationDialog by remember { mutableStateOf(false) }
             var hasPermissions by remember {
                 mutableStateOf(PermissionUtils.hasRequiredPermissions(context))
             }
+            var hasBackgroundLocation by remember {
+                mutableStateOf(PermissionUtils.hasBackgroundLocationPermission(context))
+            }
+            
+            // Re-check permissions when returning from Settings (lifecycle observer)
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        // Re-check permission states when returning from Settings
+                        val newHasPermissions = PermissionUtils.hasRequiredPermissions(context)
+                        val newHasBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(context)
+                        
+                        if (newHasPermissions != hasPermissions) {
+                            hasPermissions = newHasPermissions
+                        }
+                        if (newHasBackgroundLocation != hasBackgroundLocation) {
+                            hasBackgroundLocation = newHasBackgroundLocation
+                            // If background location was just granted, dismiss the dialog
+                            if (newHasBackgroundLocation && showBackgroundLocationDialog) {
+                                showBackgroundLocationDialog = false
+                                Toast.makeText(context, "Background location enabled!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+            
+            // Background location permission launcher (Android 10 only)
+            // On Android 11+, the system doesn't show a dialog - must use Settings
+            val backgroundLocationLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                hasBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(context)
+                if (granted || hasBackgroundLocation) {
+                    Toast.makeText(context, "Background location enabled!", Toast.LENGTH_SHORT).show()
+                    showBackgroundLocationDialog = false
+                } else {
+                    // User denied - show dialog to guide them to Settings as fallback
+                    showBackgroundLocationDialog = true
+                }
+            }
+            
+            // Main permission launcher for foreground location + notifications
             val permissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
-            ) {
+            ) { results ->
                 hasPermissions = PermissionUtils.hasRequiredPermissions(context)
-                if (hasPermissions) (activity as? MainActivity)?.onPermissionsGranted()
+                hasBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(context)
+                
+                if (hasPermissions) {
+                    (activity as? MainActivity)?.onPermissionsGranted()
+                    
+                    // After foreground permissions granted, check if we need background location
+                    if (PermissionUtils.needsBackgroundLocationPrompt(context)) {
+                        if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q) {
+                            // Android 10: Can request via dialog
+                            backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        } else {
+                            // Android 11+: Must use Settings - show dialog
+                            showBackgroundLocationDialog = true
+                        }
+                    }
+                }
             }
 
+            // Track if we've already checked background location to avoid race conditions
+            var backgroundLocationChecked by remember { mutableStateOf(false) }
+            
+            // When permissions are granted (e.g., already granted from previous install), check background location
             LaunchedEffect(hasPermissions) {
-                if (hasPermissions) splashViewModel.runAppStartCheckIfNeeded()
+                if (hasPermissions) {
+                    // Check if we need background location (Android 10+)
+                    if (PermissionUtils.needsBackgroundLocationPrompt(context)) {
+                        if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q) {
+                            // Android 10: Can request via dialog
+                            backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        } else {
+                            // Android 11+: Must use Settings - show dialog
+                            showBackgroundLocationDialog = true
+                        }
+                    } else {
+                        // All permissions OK, proceed with app start
+                        splashViewModel.runAppStartCheckIfNeeded()
+                    }
+                    backgroundLocationChecked = true
+                }
+            }
+            
+            // When background location is granted, proceed with app start
+            // Background location is MANDATORY - only proceed when it's actually granted
+            LaunchedEffect(hasBackgroundLocation, backgroundLocationChecked) {
+                if (hasPermissions && backgroundLocationChecked && hasBackgroundLocation) {
+                    // All permissions granted (including mandatory background location), proceed
+                    splashViewModel.runAppStartCheckIfNeeded()
+                }
             }
 
             LaunchedEffect(Unit) {
@@ -114,30 +205,83 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     if (navController.currentDestination?.route == "splash_route") {
                         when (effect) {
                             is SplashEffect.NavigateToHome -> {
-                                showLocationDialog = false
+                                showBackgroundLocationDialog = false
                                 navController.navigate(Screen.Home.route) {
                                     popUpTo("splash_route") { inclusive = true }
                                 }
                             }
                             is SplashEffect.ShowError ->
                                 Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
-                            is SplashEffect.RequestEnableLocation -> showLocationDialog = true
                         }
                     }
                 }
             }
 
             SplashScreen(
-                showLocationDialog = showLocationDialog,
-                onLocationOpenSettings = {
-                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                showBackgroundLocationDialog = showBackgroundLocationDialog,
+                onBackgroundLocationOpenSettings = {
+                    showBackgroundLocationDialog = false
+                    
+                    // Try to open app permissions page directly
+                    var opened = false
+                    
+                    // Method 1: Try standard app permissions intent (works on many devices)
+                    if (!opened) {
+                        try {
+                            val intent = Intent("android.settings.APPLICATION_DETAILS_SETTINGS").apply {
+                                data = android.net.Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                            opened = true
+                            Toast.makeText(
+                                context,
+                                "Tap Permissions → Location → Allow all the time",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } catch (e: Exception) {
+                            // Continue to fallback
+                        }
+                    }
+                    
+                    if (!opened) {
+                        // Fallback: Open app details
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = android.net.Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                        Toast.makeText(
+                            context,
+                            "Tap Permissions → Location → Allow all the time",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 },
-                onLocationSkip = { splashViewModel.skipLocationAndNavigateHome() },
+                onBackgroundLocationSkip = {
+                    // Background location is MANDATORY - show the dialog again
+                    Toast.makeText(
+                        context,
+                        "Background location is required for the app to function. Please grant permission.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    // Keep dialog visible - user must grant permission
+                    showBackgroundLocationDialog = true
+                },
                 hasRequiredPermissions = hasPermissions,
+                hasBackgroundLocation = hasBackgroundLocation,
                 onGrantPermissions = {
                     val perms = PermissionUtils.getPermissionsToRequest(context)
-                    if (perms.isNotEmpty()) permissionLauncher.launch(perms)
-                    else (activity as? MainActivity)?.onPermissionsGranted()
+                    if (perms.isNotEmpty()) {
+                        permissionLauncher.launch(perms)
+                    } else {
+                        // All initial permissions granted
+                        (activity as? MainActivity)?.onPermissionsGranted()
+                        
+                        // Check if we need background location (Android 11+)
+                        if (PermissionUtils.needsBackgroundLocationPrompt(context) &&
+                            PermissionUtils.requiresSettingsForBackgroundLocation()) {
+                            showBackgroundLocationDialog = true
+                        }
+                    }
                 }
             )
         }

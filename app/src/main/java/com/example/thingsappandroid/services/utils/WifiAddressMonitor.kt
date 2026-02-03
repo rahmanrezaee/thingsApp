@@ -103,9 +103,6 @@ class WifiAddressMonitor(private val context: Context) {
         if (response?.isSuccessful == true) {
             response.body()?.data?.let { data ->
                 Log.d(TAG, "✅ SetClimateStatus success: climateStatus=${data.climateStatus}")
-                data.climateStatus?.let { 
-                    PreferenceManager(context).saveClimateStatus(it) 
-                }
             }
         } else {
             Log.w(TAG, "⚠️ SetClimateStatus failed: ${response?.code() ?: "timeout"}")

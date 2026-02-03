@@ -6,6 +6,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import com.example.thingsappandroid.features.home.components.StationBottomSheet
 import com.example.thingsappandroid.features.home.components.WifiErrorDialog
 import com.example.thingsappandroid.util.TimeUtility
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: HomeState,
@@ -46,21 +49,28 @@ fun HomeScreen(
         // Fixed top bar - does not scroll
         HomeTopBar(deviceName = state.deviceName)
 
-        // Scrollable content below the top bar
-        Column(
+        // Pull-to-refresh wrapper around scrollable content
+        PullToRefreshBox(
+            isRefreshing = state.isLoading,
+            onRefresh = { onIntent(ActivityIntent.RefreshData) },
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            // Scrollable content below the top bar
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
 
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                if (state.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
             // Activity content moved here from ActivityScreen
             state.deviceInfo?.let { deviceInfo ->
@@ -225,6 +235,7 @@ fun HomeScreen(
                 }
             }
 
+            }
         }
     }
 

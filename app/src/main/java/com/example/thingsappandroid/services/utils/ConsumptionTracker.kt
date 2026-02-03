@@ -11,6 +11,7 @@ import com.example.thingsappandroid.data.local.entity.ConsumptionEntity
 import com.example.thingsappandroid.data.model.AndroidMeasurementModel
 import com.example.thingsappandroid.data.model.StationInfo
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.util.BatteryUtil
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import com.google.gson.Gson
@@ -38,7 +39,7 @@ class ConsumptionTracker(
     private var consumptionStartVoltage: Int = 0
     
     companion object {
-        const val CONSUMPTION_INTERVAL_MS = 5 * 1000L // 5 seconds
+        const val CONSUMPTION_INTERVAL_MS = 10 * 1000L // 10 seconds - always add composition (local or API)
         private const val MIN_DURATION_MS = 1_000L // 1 second
     }
     
@@ -85,31 +86,31 @@ class ConsumptionTracker(
                 consumptionStartLevel - currentLevel
             }
             
-            val avgVoltage = (consumptionStartVoltage + currentVoltage) / 2.0
+            val avgVoltageMv = (consumptionStartVoltage + currentVoltage) / 2.0
             
-            // Get battery capacity
-            val batteryCapacityMwh = try {
-                val capacity = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            // Battery capacity in mAh: CHARGE_COUNTER is µAh so /1000 = mAh; fallback to BatteryUtil (mAh)
+            val batteryCapacityMah = try {
                 val chargeCounter = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                if (chargeCounter > 0) chargeCounter / 1000 else 3000 // Default 3000mAh
+                if (chargeCounter > 0) chargeCounter / 1000 else BatteryUtil.getBatteryCapacity(context)
             } catch (e: Exception) {
-                3000 // Default 3000mAh
+                BatteryUtil.getBatteryCapacity(context)
             }
             
-            // Calculate consumption
-            // If levelDelta is 0, avgAmpere will be 0, which is correct for 5s intervals
-            val avgAmpere = if (durationHours > 0) (batteryCapacityMwh * (levelDelta / 100.0)) / durationHours else 0.0
-            val watts = (avgVoltage / 1000.0) * avgAmpere
+            // Average current: (capacity_mAh * levelDelta/100) / duration_h = mA. Convert to A for power and API.
+            val avgAmpereMa = if (durationHours > 0) (batteryCapacityMah * (levelDelta / 100.0)) / durationHours else 0.0
+            val avgAmpereA = avgAmpereMa / 1000.0
+            // Power: P = V * I (volts * amperes = watts). Voltage in mV -> V, current in mA -> A.
+            val watts = (avgVoltageMv / 1000.0) * avgAmpereA
             val wattHours = watts * durationHours
             
             // Get location
             val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             
-            // Get WiFi BSSID
+            val preferenceManager = PreferenceManager(context)
+            // WiFi BSSID: only available when app can read it (foreground). In background OS masks BSSID — do not cache; record goes to local DB and syncs when app is in foreground.
             val wifiBssid = WifiUtils.getHashedWiFiBSSID(context)
             
             // Get station info
-            val preferenceManager = PreferenceManager(context)
             val stationCode = preferenceManager.getStationCode()
             val stationInfo = preferenceManager.getStationInfo()
             
@@ -137,12 +138,12 @@ class ConsumptionTracker(
                 batteryLevelFrom = consumptionStartLevel,
                 batteryLevelTo = currentLevel,
                 isCharging = isCharging,
-                averageAmpere = avgAmpere,
-                averageVoltage = avgVoltage / 1000.0,
+                averageAmpere = avgAmpereA,
+                averageVoltage = avgVoltageMv / 1000.0,
                 interval = (durationMs / 1000).toInt(),
                 totalSamples = 1,
                 sourceType = if (isCharging) "android_charging" else "android_battery",
-                batteryCapacity = batteryCapacityMwh,
+                batteryCapacity = batteryCapacityMah,
                 emissionFactor = emissionFactor,
                 cfeScore = stationInfo?.cfeScore,
                 wifiAddress = wifiBssid,

@@ -2,9 +2,7 @@ package com.example.thingsappandroid.features.splash
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.content.Context
 import android.content.Intent
-import android.location.LocationManager
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -26,7 +24,6 @@ import javax.inject.Inject
 sealed class SplashEffect {
     object NavigateToHome : SplashEffect()
     data class ShowError(val message: String) : SplashEffect()
-    object RequestEnableLocation : SplashEffect()
 }
 
 @HiltViewModel
@@ -123,29 +120,8 @@ class SplashViewModel @Inject constructor(
         }
     }
 
-    private fun isLocationEnabled(): Boolean {
-        val locationManager = getApplication<Application>().getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-    }
-
-    /** If location is off and user hasn't skipped, send RequestEnableLocation; otherwise NavigateToHome. */
+    /** Navigate to home; we only require permission (grant/background), not "location services" enabled. */
     private suspend fun tryNavigateToHomeOrRequestLocation() {
-        if (isLocationEnabled()) {
-            _effect.send(SplashEffect.NavigateToHome)
-            return
-        }
-        if (preferenceManager.getLocationRequestSkipped()) {
-            _effect.send(SplashEffect.NavigateToHome)
-            return
-        }
-        _effect.send(SplashEffect.RequestEnableLocation)
-    }
-
-    fun skipLocationAndNavigateHome() {
-        preferenceManager.setLocationRequestSkipped(true)
-        viewModelScope.launch {
-            _effect.send(SplashEffect.NavigateToHome)
-        }
+        _effect.send(SplashEffect.NavigateToHome)
     }
 }

@@ -33,20 +33,6 @@ class PreferenceManager(context: Context) {
         sharedPreferences.edit().putString("theme_mode", mode).apply()
     }
 
-    /** API ClimateStatus (0–9). Used by BatteryService so notification matches home (Green / 1.5°C Aligned / Not green). */
-    fun getClimateStatus(): Int? {
-        val v = sharedPreferences.getInt("climate_status", -1)
-        return if (v < 0) null else v
-    }
-
-    fun saveClimateStatus(status: Int?) {
-        if (status == null) {
-            sharedPreferences.edit().remove("climate_status").apply()
-        } else {
-            sharedPreferences.edit().putInt("climate_status", status).apply()
-        }
-    }
-
     /** True when device has a station from getDeviceInfo (StationInfo). Used by BatteryService to avoid showing Station Code notification when already connected. */
     fun getHasStation(): Boolean {
         return sharedPreferences.getBoolean("has_station", false)
@@ -127,5 +113,16 @@ class PreferenceManager(context: Context) {
 
     fun setLocationRequestSkipped(skipped: Boolean) {
         sharedPreferences.edit().putBoolean("location_request_skipped", skipped).apply()
+    }
+
+    /** Last known WiFi BSSID (hashed). Used to detect WiFi changes and trigger device info refresh. */
+    fun getLastWifiBssid(): String? = sharedPreferences.getString("last_wifi_bssid", null)
+
+    fun saveLastWifiBssid(bssid: String?) {
+        if (bssid == null) {
+            sharedPreferences.edit().remove("last_wifi_bssid").apply()
+        } else {
+            sharedPreferences.edit().putString("last_wifi_bssid", bssid).apply()
+        }
     }
 }

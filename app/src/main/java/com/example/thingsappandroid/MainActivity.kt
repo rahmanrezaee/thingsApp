@@ -10,8 +10,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -28,6 +26,7 @@ import com.example.thingsappandroid.services.BatteryService
 import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.ui.components.GlobalMessageHost
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
+import com.example.thingsappandroid.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import io.sentry.Sentry
@@ -41,101 +40,22 @@ class MainActivity : ComponentActivity() {
     // Location and Notification granted - can proceed past permission screen.
     private var hasRequiredPermissions by mutableStateOf(false)
 
-    private fun computeHasRequiredPermissions(): Boolean {
-        val fineLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarseLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+    // Last known permission state from previous onResume (used to detect transition when user returns from Settings).
+    private var lastKnownBackgroundLocation: Boolean = false
 
-        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-
-        return (fineLocationGranted || coarseLocationGranted) && notificationGranted
-    }
-
-    private fun hasNotificationGranted(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-    }
-
-    // Combined permission launcher
-    private val permissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-        val locationGranted = fineLocationGranted || coarseLocationGranted
-
-        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: hasNotificationGranted()
-        } else {
-            true
-        }
-
-        hasRequiredPermissions = locationGranted && notificationGranted
-
-        if (hasRequiredPermissions) {
-            Toast.makeText(this, "All permissions granted.", Toast.LENGTH_SHORT).show()
-            startChargingDetectionService()
-        } else {
-            Toast.makeText(this, "Both Location and Notification permissions are required.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    /** Called from composable when user grants permissions (e.g. from SplashScreen). */
+    /**
+     * Called from composable when user grants permissions (e.g. from SplashScreen).
+     * All permission requests are handled in SplashScreen/AppNavigation.
+     */
     fun onPermissionsGranted() {
         hasRequiredPermissions = true
-        Toast.makeText(this, "All permissions granted.", Toast.LENGTH_SHORT).show()
+        Log.d("MainActivity", "Permissions granted, starting service")
         startChargingDetectionService()
-    }
-
-    /** Request both location and notification permissions. */
-    fun checkAndRequestPermissions() {
-        val fineLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarseLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-
-        val permissionsToRequest = mutableListOf<String>()
-        if (!fineLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        if (!coarseLocationGranted) permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
-            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        if (permissionsToRequest.isNotEmpty()) {
-            permissionsLauncher.launch(permissionsToRequest.toTypedArray())
-        } else {
-            hasRequiredPermissions = true
-            startChargingDetectionService()
-        }
     }
 
     /**
      * Handles the REQUEST_LOCATION_PERMISSION intent sent by BatteryService.
-     * Only requests location — notification is already granted if the service is running.
+     * This is a legacy handler - permission requests are now handled in SplashScreen.
      * Returns true if the intent was consumed, false otherwise.
      */
     private fun handleLocationPermissionRequest(intent: Intent?): Boolean {
@@ -145,26 +65,17 @@ class MainActivity : ComponentActivity() {
 
         Log.d("MainActivity", "REQUEST_LOCATION_PERMISSION intent received from BatteryService")
 
-        val fineLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarseLocationGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineLocationGranted || coarseLocationGranted) {
-            // Already granted — nothing to do, BatteryService's polling loop will pick it up
+        if (PermissionUtils.hasForegroundLocationPermission(this)) {
             Log.d("MainActivity", "Location already granted, no action needed")
             return true
         }
 
-        // Request only location permissions — service is already running so notification is granted
-        permissionsLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
+        // If location not granted, let the user know they need to grant it
+        Toast.makeText(
+            this,
+            "Location permission is required. Please grant it in the app.",
+            Toast.LENGTH_LONG
+        ).show()
 
         // Clear the action so it doesn't re-trigger on config changes
         intent.action = null
@@ -172,17 +83,22 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
-    /** Attempts to start BatteryService. */
-    private fun tryStartChargingDetectionServiceOrRequestNotification() {
-        if (hasRequiredPermissions) {
-            startChargingDetectionService()
-        } else {
-            checkAndRequestPermissions()
-        }
-    }
-
-    private fun startChargingDetectionService() {
+    /**
+     * Starts BatteryService only if not already running and all permissions are granted.
+     * Requires both foreground and background location permissions.
+     */
+    fun startChargingDetectionService() {
         try {
+            if (isServiceRunning(BatteryService::class.java)) {
+                Log.d("MainActivity", "BatteryService already running, skipping start")
+                return
+            }
+            
+            // Check if background location is granted - REQUIRED
+            if (!PermissionUtils.hasBackgroundLocationPermission(this)) {
+                Log.w("MainActivity", "Background location not granted, cannot start service")
+                return
+            }
             // For Android 14+ (API 34), check if notification permission is granted before starting foreground service
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val notificationGranted = ContextCompat.checkSelfPermission(
@@ -197,7 +113,6 @@ class MainActivity : ComponentActivity() {
                         "ERROR: Notification permission required for Android 14+ (${Build.MANUFACTURER} ${Build.MODEL})",
                         Toast.LENGTH_LONG
                     ).show()
-                    // Service will be started after permission is granted
                     return
                 }
             }
@@ -219,21 +134,6 @@ class MainActivity : ComponentActivity() {
                 e.printStackTrace()
                 Toast.makeText(this, "Failed to start BatteryService: ${e.message}", Toast.LENGTH_LONG).show()
             }
-
-            // Check if service is running after a short delay
-            // Use a Handler that's properly scoped to avoid dead thread issues
-            val handler = android.os.Handler(mainLooper)
-            handler.postDelayed({
-                if (!isFinishing && !isDestroyed) {
-                    if (isServiceRunning(BatteryService::class.java)) {
-                        Log.d("MainActivity", "Service is confirmed running")
-                        Toast.makeText(this, "Background service started", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Log.w("MainActivity", "Service may not be running")
-                        Toast.makeText(this, "Service start failed", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }, 2000)
         } catch (e: SecurityException) {
             Log.e("MainActivity", "SecurityException starting service", e)
             Sentry.withScope { scope ->
@@ -301,11 +201,14 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hasRequiredPermissions = computeHasRequiredPermissions()
+        hasRequiredPermissions = PermissionUtils.hasRequiredPermissions(this)
 
-        // Start service when we have required permissions - e.g. returning user
-        if (hasRequiredPermissions) {
+        // Start service if all permissions are granted (including background location)
+        if (hasRequiredPermissions && PermissionUtils.hasBackgroundLocationPermission(this)) {
+            Log.d("MainActivity", "All permissions granted, starting service")
             startChargingDetectionService()
+        } else {
+            Log.d("MainActivity", "Waiting for permissions (hasRequired: $hasRequiredPermissions, hasBackground: ${PermissionUtils.hasBackgroundLocationPermission(this)})")
         }
 
         // Handle intents: location permission request, station code, deep links
@@ -325,8 +228,30 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Re-check permissions in case user changed them in Settings.
+        // Use lastKnown* from previous run so we detect transition when user returns from Settings.
+        val previousPermissions = hasRequiredPermissions
+        val previousBackgroundLocation = lastKnownBackgroundLocation
+        hasRequiredPermissions = PermissionUtils.hasRequiredPermissions(this)
+        val currentBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(this)
+        lastKnownBackgroundLocation = currentBackgroundLocation
+
+        // Log permission status for debugging
+        Log.d("MainActivity", "onResume - Required permissions: $hasRequiredPermissions")
+        Log.d("MainActivity", "onResume - Background location: $currentBackgroundLocation")
+        
+        // If all permissions just granted (including background location), start service
+        if (hasRequiredPermissions && currentBackgroundLocation && (!previousPermissions || !previousBackgroundLocation)) {
+            Log.d("MainActivity", "All permissions granted after returning from Settings, starting service")
+            startChargingDetectionService()
+        }
+        
         // Re-check WiFi status when user returns from settings
-        // This will refresh device info if WiFi/Location was enabled
+        // Only get HomeViewModel and dispatch when onboarding is completed; otherwise we would
+        // create HomeViewModel on first launch (onboarding screen) and trigger getDeviceInfo calls.
+        if (!preferenceManager.isOnboardingCompleted()) {
+            return
+        }
         try {
             val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
             viewModel.dispatch(ActivityIntent.ShowWifiError)

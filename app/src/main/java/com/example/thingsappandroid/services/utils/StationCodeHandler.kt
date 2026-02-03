@@ -157,9 +157,6 @@ class StationCodeHandler(private val context: Context) {
                 response.body()?.data?.let { data ->
                     climateStatus = data.climateStatus
                     Log.d(TAG, "✅ SetClimateStatus success: climateStatus=$climateStatus")
-                    climateStatus?.let { 
-                        PreferenceManager(context).saveClimateStatus(it) 
-                    }
                 }
             } else {
                 Log.w(TAG, "⚠️ SetClimateStatus failed: ${response?.code() ?: "timeout"}")
