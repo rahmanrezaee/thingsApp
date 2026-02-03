@@ -1,19 +1,25 @@
 package com.example.thingsappandroid.features
 
+import android.content.Intent
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.example.thingsappandroid.features.home.components.HomeBottomBar
 import com.example.thingsappandroid.features.home.screens.HomeScreen
@@ -32,6 +38,18 @@ fun MainScreen(
     val state by homeViewModel.state.collectAsState()
     val currentTab = state.selectedBottomTabIndex
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Re-check location when user returns from settings (e.g. after enabling location)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                homeViewModel.dispatch(ActivityIntent.CheckLocationStatus)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(Unit) {
         homeViewModel.effect.collect { effect ->
@@ -69,7 +87,10 @@ fun MainScreen(
             when (currentTab) {
                 0 -> HomeScreen(
                     state = state,
-                    onIntent = { homeViewModel.dispatch(it) }
+                    onIntent = { homeViewModel.dispatch(it) },
+                    onOpenLocationSettings = {
+                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    }
                 )
                 1 -> {} // Keep for now, can be removed later
                 2 -> {} // Keep for now, can be removed later

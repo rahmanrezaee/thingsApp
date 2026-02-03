@@ -77,7 +77,7 @@ class SplashViewModel @Inject constructor(
                 }
                 val hasStation = lastDeviceInfo?.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
-                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
+                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
                 tryNavigateToHomeOrRequestLocation()
                 return@launch
             }
@@ -94,7 +94,7 @@ class SplashViewModel @Inject constructor(
                     deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
                     val hasStation = deviceInfo?.stationInfo != null
                     preferenceManager.setHasStation(hasStation)
-                    getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
+                    getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
                     tryNavigateToHomeOrRequestLocation()
                 } else {
                     Log.e("SplashViewModel", "Device initialization failed")

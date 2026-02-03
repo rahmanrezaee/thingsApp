@@ -18,7 +18,7 @@ class StationCodeReceiver : BroadcastReceiver() {
                 Log.d("StationCodeReceiver", "Received station code from notification: $stationCode")
                 
                 // Send broadcast to notify BatteryService to update immediately with the code
-                val updateIntent = Intent(BatteryServiceActions.HAS_STATION_UPDATED).apply {
+                val updateIntent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
                     putExtra("station_code", stationCode.trim())
                 }
                 context.sendBroadcast(updateIntent)

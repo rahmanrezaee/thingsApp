@@ -125,4 +125,11 @@ class PreferenceManager(context: Context) {
             sharedPreferences.edit().putString("last_wifi_bssid", bssid).apply()
         }
     }
+
+    /** True when app is in foreground (MainActivity visible). BatteryService skips "enable location" notification when true (HomeScreen shows dialog instead). */
+    fun getAppInForeground(): Boolean = sharedPreferences.getBoolean("app_in_foreground", false)
+
+    fun setAppInForeground(inForeground: Boolean) {
+        sharedPreferences.edit().putBoolean("app_in_foreground", inForeground).apply()
+    }
 }

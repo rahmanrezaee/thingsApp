@@ -5,14 +5,20 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import android.content.Intent
+import android.provider.Settings
 import com.example.thingsappandroid.features.home.viewModel.ActivityIntent
 import com.example.thingsappandroid.features.home.viewModel.HomeState
 import com.example.thingsappandroid.features.home.components.BatteryCard
@@ -40,7 +46,8 @@ import com.example.thingsappandroid.util.TimeUtility
 @Composable
 fun HomeScreen(
     state: HomeState,
-    onIntent: (ActivityIntent) -> Unit
+    onIntent: (ActivityIntent) -> Unit,
+    onOpenLocationSettings: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -67,12 +74,7 @@ fun HomeScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (state.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-            // Activity content moved here from ActivityScreen
+            // Activity content (pull-to-refresh shows loading; no extra loading indicator in content)
             state.deviceInfo?.let { deviceInfo ->
                 val isGreen = state.stationInfo?.isGreen == true
 
@@ -300,6 +302,41 @@ fun HomeScreen(
         )
     }
     
+    // Enable Location dialog (when WiFi is on but location is off)
+    if (state.showLocationEnableDialog) {
+        val context = LocalContext.current
+        AlertDialog(
+            onDismissRequest = { /* keep visible until user taps Open Settings or Skip */ },
+            title = {
+                Text(
+                    "Enable Location",
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Text(
+                    "Location is required for carbon tracking and accurate device info. Enable location to load the latest data and update your notification.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onOpenLocationSettings?.invoke()
+                            ?: context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    }
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onIntent(ActivityIntent.SkipLocationRequest) }) {
+                    Text("Skip")
+                }
+            }
+        )
+    }
+
     // WiFi Error Dialog
     if (state.showWifiErrorDialog) {
         WifiErrorDialog(

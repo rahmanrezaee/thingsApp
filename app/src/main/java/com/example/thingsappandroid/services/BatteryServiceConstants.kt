@@ -5,8 +5,8 @@ package com.example.thingsappandroid.services
  * Centralized to avoid magic strings and ensure consistency across the app.
  */
 object BatteryServiceActions {
-    /** Broadcast after GetDeviceInfo + save to local Preference. Triggers climate status notification update. */
-    const val HAS_STATION_UPDATED = "com.example.thingsappandroid.HAS_STATION_UPDATED"
+    /** Broadcast after getDeviceInfo API call + save to local Preference. BatteryService uses this for updateNotification(). */
+    const val DEVICEINFO_UPDATED = "com.example.thingsappandroid.DEVICEINFO_UPDATED"
 
     /** Intent action to open station code dialog (e.g. from notification tap) */
     const val OPEN_STATION_CODE = "com.example.thingsappandroid.OPEN_STATION_CODE"

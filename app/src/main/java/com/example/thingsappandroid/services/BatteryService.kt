@@ -28,11 +28,9 @@ import com.example.thingsappandroid.services.utils.BatteryNotificationHelper
 import com.example.thingsappandroid.services.utils.ClimateStatusManager
 import com.example.thingsappandroid.services.utils.ConsumptionTracker
 import com.example.thingsappandroid.services.utils.StationCodeHandler
-import com.example.thingsappandroid.services.utils.WifiAddressMonitor
 import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
-import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +62,6 @@ class BatteryService : Service() {
 
     // Utility managers
     private lateinit var consumptionTracker: ConsumptionTracker
-    private lateinit var wifiAddressMonitor: WifiAddressMonitor
     private lateinit var stationCodeHandler: StationCodeHandler
     private lateinit var climateStatusManager: ClimateStatusManager
     private lateinit var notificationHelper: BatteryNotificationHelper
@@ -76,7 +73,7 @@ class BatteryService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: "null"
             when (action) {
-                BatteryServiceActions.HAS_STATION_UPDATED -> updateNotification()
+                BatteryServiceActions.DEVICEINFO_UPDATED -> updateNotification()
                 Intent.ACTION_BATTERY_CHANGED,
                 Intent.ACTION_POWER_CONNECTED,
                 Intent.ACTION_POWER_DISCONNECTED,
@@ -150,7 +147,12 @@ class BatteryService : Service() {
                     updateNotification()
                 }
             } else if (wifiOk && !locationOk) {
-                showLocationRequiredNotification()
+                // Don't show notification when app is open – HomeScreen shows the enable-location dialog
+                if (!PreferenceManager(applicationContext).getAppInForeground()) {
+                    showLocationRequiredNotification()
+                } else {
+                    notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+                }
             } else if (!wifiOk) {
                 notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
             }
@@ -202,7 +204,7 @@ class BatteryService : Service() {
 
     private fun registerBroadcastReceiver() {
         val filter = IntentFilter().apply {
-            addAction(BatteryServiceActions.HAS_STATION_UPDATED)
+            addAction(BatteryServiceActions.DEVICEINFO_UPDATED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
@@ -243,7 +245,7 @@ class BatteryService : Service() {
             sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
             consumptionTracker = ConsumptionTracker(this, deviceId, batteryManager)
-            wifiAddressMonitor = WifiAddressMonitor(this)
+
             stationCodeHandler = StationCodeHandler(this)
             climateStatusManager = ClimateStatusManager(this)
             notificationHelper = BatteryNotificationHelper(this, notificationManager)
@@ -619,7 +621,7 @@ class BatteryService : Service() {
 
     /**
      * Updates the foreground notification (climate status / title).
-     * Called from: HAS_STATION_UPDATED, charge-state change in handleConnectivityIntent,
+     * Called from: DEVICEINFO_UPDATED broadcast (after getDeviceInfo API + save), charge-state change in handleConnectivityIntent,
      * after handleChargingStartedInternal(), and onStartCommand. No periodic timer.
      */
     private fun updateNotification() {

@@ -183,7 +183,7 @@ class ClimateStatusManager(private val context: Context) {
                         prefManager.saveStationCode(deviceInfo.stationInfo!!.stationCode)
                     }
                     
-                    context.sendBroadcast(Intent(BatteryServiceActions.HAS_STATION_UPDATED))
+                    context.sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
                 }
             } else {
                 Log.w(TAG, "getDeviceInfo failed: ${response?.code() ?: "timeout"}")

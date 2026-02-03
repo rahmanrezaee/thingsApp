@@ -228,6 +228,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        preferenceManager.setAppInForeground(true)
         // Re-check permissions in case user changed them in Settings.
         // Use lastKnown* from previous run so we detect transition when user returns from Settings.
         val previousPermissions = hasRequiredPermissions
@@ -259,6 +260,11 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w("MainActivity", "Failed to refresh WiFi status on resume: ${e.message}")
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        preferenceManager.setAppInForeground(false)
     }
 
     override fun onNewIntent(intent: Intent?) {
