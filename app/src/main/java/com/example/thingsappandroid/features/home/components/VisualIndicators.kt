@@ -45,53 +45,64 @@ fun BatteryLiquidIndicator(
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val strokeWidth = 2.5.dp.toPx()
+        val strokeWidth = 1.8.dp.toPx()
         val halfStroke = strokeWidth / 2
-        
-        val capWidth = 14.dp.toPx()
-        val capHeight = 3.dp.toPx()
-        val bodyTop = 4.dp.toPx()
-        
+        val innerPadding = 3.dp.toPx() // Gap between outline and liquid fill
+
+        val capWidth = 12.dp.toPx()
+        val capHeight = 3.5.dp.toPx()
+        val capCorner = 1.5.dp.toPx()
+        val bodyTop = capHeight + 1.dp.toPx()
+
         val bodyBounds = Rect(
             left = halfStroke,
             top = bodyTop + halfStroke,
             right = w - halfStroke,
             bottom = h - halfStroke
         )
-        val bodyCornerRadius = CornerRadius(4.dp.toPx())
+        val bodyCornerRadius = CornerRadius(6.dp.toPx())
 
-        val bodyPath = Path().apply {
-            addRoundRect(RoundRect(bodyBounds, bodyCornerRadius))
+        // Inner fill area (inset from the outline)
+        val fillBounds = Rect(
+            left = bodyBounds.left + innerPadding,
+            top = bodyBounds.top + innerPadding,
+            right = bodyBounds.right - innerPadding,
+            bottom = bodyBounds.bottom - innerPadding
+        )
+        val fillCornerRadius = CornerRadius(4.dp.toPx())
+
+        val fillClipPath = Path().apply {
+            addRoundRect(RoundRect(fillBounds, fillCornerRadius))
         }
 
-        clipPath(bodyPath) {
-            val fillHeight = bodyBounds.height * level
-            val baseLevelY = bodyBounds.bottom - fillHeight
-            
-            val liquidPath = Path()
-            liquidPath.moveTo(0f, bodyBounds.bottom)
-            
+        clipPath(fillClipPath) {
+            val fillHeight = fillBounds.height * level.coerceIn(0f, 1f)
+            val baseLevelY = fillBounds.bottom - fillHeight
+
             if (fillHeight > 0) {
+                val liquidPath = Path()
+                liquidPath.moveTo(fillBounds.left, fillBounds.bottom)
+
                 val waveAmplitude = if (isAnimating) 1.5.dp.toPx() else 0f
-                val freq = (2 * PI / w).toFloat()
-                
-                var x = 0f
+                val freq = (2 * PI / fillBounds.width).toFloat()
                 val steps = 100
-                val stepX = w / steps
-                
+                val stepX = fillBounds.width / steps
+
                 val startAngle = (0f * freq + phase)
                 val startY = baseLevelY + (sin(startAngle.toDouble()).toFloat() * waveAmplitude)
-                liquidPath.lineTo(0f, startY)
-                
-                while (x <= w) {
-                    val angle = (x * freq + phase)
+                liquidPath.lineTo(fillBounds.left, startY)
+
+                var x = fillBounds.left
+                while (x <= fillBounds.right) {
+                    val localX = x - fillBounds.left
+                    val angle = (localX * freq + phase)
                     val yOffset = sin(angle.toDouble()).toFloat() * waveAmplitude
                     liquidPath.lineTo(x, baseLevelY + yOffset)
                     x += stepX
                 }
-                
-                liquidPath.lineTo(w, bodyBounds.bottom)
-                liquidPath.lineTo(0f, bodyBounds.bottom)
+
+                liquidPath.lineTo(fillBounds.right, fillBounds.bottom)
+                liquidPath.lineTo(fillBounds.left, fillBounds.bottom)
                 liquidPath.close()
 
                 drawPath(
@@ -99,24 +110,24 @@ fun BatteryLiquidIndicator(
                     brush = Brush.verticalGradient(
                         colors = listOf(colorStart, colorEnd),
                         startY = baseLevelY,
-                        endY = bodyBounds.bottom
+                        endY = fillBounds.bottom
                     )
                 )
             }
         }
-        
+
         val outlineColor = Color(0xFF404040)
-        
-        // Cap
+
+        // Cap (centered, rounded)
         val capLeft = (w - capWidth) / 2
         drawRoundRect(
             color = outlineColor,
             topLeft = Offset(capLeft, halfStroke),
             size = Size(capWidth, capHeight),
-            cornerRadius = CornerRadius(1.dp.toPx())
+            cornerRadius = CornerRadius(capCorner)
         )
 
-        // Body
+        // Body outline
         drawRoundRect(
             color = outlineColor,
             topLeft = bodyBounds.topLeft,
@@ -135,47 +146,58 @@ fun CarbonBatteryIcon(
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val strokeWidth = 2.5.dp.toPx()
+        val strokeWidth = 1.8.dp.toPx()
         val halfStroke = strokeWidth / 2
-        
-        val capWidth = 14.dp.toPx()
-        val capHeight = 3.dp.toPx()
-        val bodyTop = 4.dp.toPx()
-        
+        val innerPadding = 3.dp.toPx()
+
+        val capWidth = 12.dp.toPx()
+        val capHeight = 3.5.dp.toPx()
+        val capCorner = 1.5.dp.toPx()
+        val bodyTop = capHeight + 1.dp.toPx()
+
         val bodyBounds = Rect(
             left = halfStroke,
             top = bodyTop + halfStroke,
             right = w - halfStroke,
             bottom = h - halfStroke
         )
-        val bodyCornerRadius = CornerRadius(4.dp.toPx())
+        val bodyCornerRadius = CornerRadius(6.dp.toPx())
 
-        // Draw Fill (Bottom up)
-        val fillHeight = bodyBounds.height * level.coerceIn(0f, 1f)
-        val fillTop = bodyBounds.bottom - fillHeight
-        
+        // Inner fill area (inset from the outline)
+        val fillBounds = Rect(
+            left = bodyBounds.left + innerPadding,
+            top = bodyBounds.top + innerPadding,
+            right = bodyBounds.right - innerPadding,
+            bottom = bodyBounds.bottom - innerPadding
+        )
+        val fillCornerRadius = CornerRadius(4.dp.toPx())
+
+        // Draw fill clipped to inner bounds
+        val clampedLevel = level.coerceIn(0f, 1f)
+        val fillHeight = fillBounds.height * clampedLevel
+
         if (fillHeight > 0) {
-            drawRoundRect(
-                color = Color(0xFF1E1E1E), // Dark fill
-                topLeft = Offset(bodyBounds.left, fillTop),
-                size = Size(bodyBounds.width, fillHeight),
-                cornerRadius = if (level > 0.9f) bodyCornerRadius else CornerRadius(0f) 
-                // Simplified corner logic: strictly normally we'd clip, but for this style flat top is ok for partial fill
-            )
-            // Re-draw rounded bottom to ensure corner shape if fill is small, 
-            // or better: use clipPath like liquid battery if perfection needed. 
-            // For this specific UI style (outline), let's just stick to the outline on top.
+            val fillClipPath = Path().apply {
+                addRoundRect(RoundRect(fillBounds, fillCornerRadius))
+            }
+            clipPath(fillClipPath) {
+                drawRect(
+                    color = Color(0xFF1E1E1E),
+                    topLeft = Offset(fillBounds.left, fillBounds.bottom - fillHeight),
+                    size = Size(fillBounds.width, fillHeight)
+                )
+            }
         }
 
         val outlineColor = Color(0xFF1E1E1E)
-        
-        // Cap
+
+        // Cap (centered, rounded)
         val capLeft = (w - capWidth) / 2
         drawRoundRect(
             color = outlineColor,
             topLeft = Offset(capLeft, halfStroke),
             size = Size(capWidth, capHeight),
-            cornerRadius = CornerRadius(1.dp.toPx())
+            cornerRadius = CornerRadius(capCorner)
         )
 
         // Body Outline

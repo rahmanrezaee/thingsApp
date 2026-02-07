@@ -17,6 +17,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -31,9 +32,11 @@ import com.example.thingsappandroid.services.utils.StationCodeHandler
 import com.example.thingsappandroid.util.ClimateUtils
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
+import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -41,6 +44,8 @@ import kotlinx.coroutines.launch
 
 class BatteryService : Service() {
 
+
+    private  var tag: String = "BatteryServiceLog";
     private lateinit var deviceId: String
     private lateinit var notification: NotificationCompat.Builder
     private lateinit var notificationManager: NotificationManager
@@ -56,6 +61,13 @@ class BatteryService : Service() {
     private var currentStationCode: String? = null
     /** Only show station code notification once per charging session; reset on unplug. */
     private var stationCodeNotificationShownThisChargingSession = false
+
+    /** True after broadcast receiver is registered in onStartCommand (after startForeground). Avoids delivery before foreground. */
+    private var receiverRegistered = false
+
+    /** Debounce rapid WiFi/location broadcasts (system often fires many for one user action). */
+    private var connectivityDebounceJob: Job? = null
+    private val connectivityDebounceMs = 500L
 
     // Device Climate Status
     private var currentDCS: DeviceClimateStatus = DeviceClimateStatus.UNKNOWN
@@ -76,98 +88,198 @@ class BatteryService : Service() {
                 BatteryServiceActions.DEVICEINFO_UPDATED -> updateNotification()
                 Intent.ACTION_BATTERY_CHANGED,
                 Intent.ACTION_POWER_CONNECTED,
-                Intent.ACTION_POWER_DISCONNECTED,
+                Intent.ACTION_POWER_DISCONNECTED -> handleConnectivityIntent(intent)
                 WifiManager.NETWORK_STATE_CHANGED_ACTION,
                 WifiManager.WIFI_STATE_CHANGED_ACTION,
                 ConnectivityManager.CONNECTIVITY_ACTION,
                 LocationManager.PROVIDERS_CHANGED_ACTION,
-                LocationManager.MODE_CHANGED_ACTION -> handleConnectivityIntent(intent)
-                else -> { }
+                LocationManager.MODE_CHANGED_ACTION -> {
+                    connectivityDebounceJob?.cancel()
+                    connectivityDebounceJob = serviceScope.launch {
+                        delay(connectivityDebounceMs)
+                        connectivityDebounceJob = null
+                        handleConnectivityIntent(intent)
+                    }
+                }
             }
         }
     }
 
-    /**
-     * Single handler for battery, wifi, and location intents.
-     * 1. If battery intent: update chargeState, handle charging start/stop
-     * 2. Check wifi and location - if both available -> call SetClimateStatus first
-     * 3. If only location not enabled -> show notification to enable
-     * 4. Save consumption not sent to server (sync pending to local)
-     * Station code notification is only triggered when [fromInitialFetch] is true (service start while charging) or action is ACTION_POWER_CONNECTED.
-     */
+  
     private fun handleConnectivityIntent(intent: Intent?, fromInitialFetch: Boolean = false) {
+
+        // log which intent action called
+        Log.d(tag,"handleConnectivityIntent ${intent?.action.toString()}")
+
         // Parse battery and update chargeState when it's a battery intent
-        if (intent?.action in listOf(
-                Intent.ACTION_BATTERY_CHANGED,
-                Intent.ACTION_POWER_CONNECTED,
-                Intent.ACTION_POWER_DISCONNECTED
-            )) {
-            val i = intent!!
-            val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                    status == BatteryManager.BATTERY_STATUS_FULL
-            val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-            val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 0
-            val voltage = i.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
-            val plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
-            val wasCharging = chargeState?.isCharging ?: false
-            val isInitialization = chargeState == null
-            if (isInitialization || wasCharging != isCharging) {
-                if (!isCharging && wasCharging) {
-                    stationCodeNotificationShownThisChargingSession = false
-                    notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
-                    notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
-                    serviceScope.launch {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            consumptionTracker.stopTracking(level, voltage)
-                        }
-                    }
-                }
-                if (isCharging && !isInitialization) {
-                    consumptionTracker.startTracking(batteryPct, voltage)
-                    startPeriodicConsumptionReports()
-                }
-                chargeState = BatteryState(isCharging, voltage, batteryPct, plugged)
-                groupId = java.util.UUID.randomUUID().toString()
-                updateNotification()
-            }
+        if (isBatteryIntent(intent?.action)) {
+            handleBatteryIntent(intent!!)
         }
 
         serviceScope.launch {
-            val wifiOk = isWiFiConnected(applicationContext)
-            val locationOk = LocationUtils.hasLocationPermission(applicationContext) &&
+            val wifiReady = isWiFiConnected(applicationContext)
+            val locationReady = LocationUtils.hasLocationPermission(applicationContext) &&
                     LocationUtils.isLocationEnabled(applicationContext)
+            val isWifiIntent = isWifiOrConnectivityAction(intent?.action)
+            val isPowerConnected = getChargingStatusFromIntent(intent) ?: (chargeState?.isCharging == true)
+            val current = WifiUtils.getHashedWiFiBSSID(applicationContext)
+            val last = PreferenceManager(applicationContext).getLastWifiBssid()
+            val bssidChanged = current != null && current != last
 
-            // When wifi+location ok and charging: call SetClimateStatus (suspend until done), then update notification
-            if (wifiOk && locationOk) {
-                notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
-                if (chargeState?.isCharging == true && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    handleChargingStartedInternal()
-                    updateNotification()
-                }
-            } else if (wifiOk && !locationOk) {
-                // Don't show notification when app is open – HomeScreen shows the enable-location dialog
-                if (!PreferenceManager(applicationContext).getAppInForeground()) {
-                    showLocationRequiredNotification()
-                } else {
-                    notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
-                }
-            } else if (!wifiOk) {
-                notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+            Log.d(tag,"handleConnectivityIntent wifiReady: $wifiReady locationReady: $locationReady isWifiIntent: $isWifiIntent isPowerConnected: $isPowerConnected")
+            Log.d(tag,"BSSID - current: ${current}... last: ${last}... changed: $bssidChanged")
+
+            when {
+                wifiReady && locationReady -> onWifiAndLocationReady(isWifiIntent, bssidChanged, isPowerConnected)
+                wifiReady && !locationReady -> onWifiReadyLocationMissing()
+                else -> onWifiMissing()
             }
 
-            // Station code only when wifi is on and location on and charger was just connected
-            val isPlugEventOrInitialCharging = intent?.action == Intent.ACTION_POWER_CONNECTED ||
+            tryShowStationCodeIfNeeded(wifiReady, locationReady, isPowerConnected, fromInitialFetch)
+            syncPendingConsumptionsIfSupported()
+        }
+    }
+
+    /**
+     * Checks if the intent action is battery-related.
+     */
+    private fun isBatteryIntent(action: String?): Boolean =
+        action in listOf(
+            Intent.ACTION_BATTERY_CHANGED,
+            Intent.ACTION_POWER_CONNECTED,
+            Intent.ACTION_POWER_DISCONNECTED
+        )
+
+    /**
+     * Extracts charging status directly from battery intent if available.
+     * Returns null if intent is not a battery intent or doesn't contain battery status.
+     */
+    private fun getChargingStatusFromIntent(intent: Intent?): Boolean? {
+        if (!isBatteryIntent(intent?.action)) return null
+        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: return null
+        return status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+    }
+
+    /**
+     * Parses battery intent, updates charge state, and handles charging start/stop logic.
+     * - On unplug: stops consumption tracking, resets station code notification flag
+     * - On plug: starts consumption tracking and periodic reports
+     * - Updates chargeState, generates new groupId, and refreshes notification
+     */
+    private fun handleBatteryIntent(intent: Intent) {
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 0
+        val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+        
+        val wasCharging = chargeState?.isCharging ?: false
+        val isInitialization = chargeState == null
+        
+        // Only update if state changed or this is the first read
+        if (isInitialization || wasCharging != isCharging) {
+            // Handle unplug: stop tracking, clear notifications
+            if (!isCharging && wasCharging) {
+                stationCodeNotificationShownThisChargingSession = false
+                notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
+                notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+                serviceScope.launch {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        consumptionTracker.stopTracking(level, voltage)
+                    }
+                }
+            }
+            
+            // Handle plug: start tracking and reports
+            if (isCharging && !isInitialization) {
+                consumptionTracker.startTracking(batteryPct, voltage)
+                startPeriodicConsumptionReports()
+            }
+            
+            // Update state and notification
+            chargeState = BatteryState(isCharging, voltage, batteryPct, plugged)
+            groupId = java.util.UUID.randomUUID().toString()
+            updateNotification()
+        }
+    }
+
+    private fun isWifiOrConnectivityAction(action: String?): Boolean =
+        action in listOf(
+            WifiManager.NETWORK_STATE_CHANGED_ACTION,
+            WifiManager.WIFI_STATE_CHANGED_ACTION,
+            ConnectivityManager.CONNECTIVITY_ACTION
+        )
+
+    /**
+     * WiFi and location are both available. Cancel location nag; run charging/device flow when
+     * plug just connected or BSSID changed (new network).
+     */
+    private suspend fun onWifiAndLocationReady(
+        isWifiIntent: Boolean,
+        bssidChanged: Boolean,
+        isPowerConnected: Boolean
+    ) {
+        notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+        
+        // Dismiss station code notification when WiFi changes (new network)
+        if (bssidChanged) {
+            Log.d(tag, "WiFi BSSID changed - dismissing station code notification")
+            notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
+            stationCodeNotificationShownThisChargingSession = false
+        }
+        
+        val runChargingFlow = when {
+            isPowerConnected && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> true
+            bssidChanged && isWifiIntent -> true
+            else -> false
+        }
+        if (runChargingFlow) {
+            handleChargingStartedInternal()
+            updateNotification()
+        }
+    }
+
+    /**
+     * WiFi on but location off. Show "enable location" only when app is in background.
+     */
+    private fun onWifiReadyLocationMissing() {
+        if (PreferenceManager(applicationContext).getAppInForeground()) {
+            notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+        } else {
+            showLocationRequiredNotification()
+        }
+    }
+
+    /**
+     * WiFi not connected. Clear location notification.
+     */
+    private fun onWifiMissing() {
+        notificationManager.cancel(CHARGING_STARTED_LOCATION_NOTIFICATION_ID)
+    }
+
+    /**
+     * Show station-code notification at most once per session when plug connected (or initial fetch while charging).
+     */
+    private suspend fun tryShowStationCodeIfNeeded(
+        wifiReady: Boolean,
+        locationReady: Boolean,
+        isPowerConnected: Boolean,
+        fromInitialFetch: Boolean
+    ) {
+        val isPlugOrInitialCharging = isPowerConnected ||
                 (fromInitialFetch && chargeState?.isCharging == true)
-            if (wifiOk && locationOk && isPlugEventOrInitialCharging) {
-                maybeShowStationCodeNotificationOnce()
-            }
+        if (wifiReady && locationReady && isPlugOrInitialCharging) {
+            maybeShowStationCodeNotificationOnce()
+        }
+    }
 
-            // Save consumption not sent to server (sync: upload if possible, else keep in local)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                consumptionTracker.syncPendingConsumptions()
-            }
+    private suspend fun syncPendingConsumptionsIfSupported() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            consumptionTracker.syncPendingConsumptions()
         }
     }
 
@@ -252,7 +364,6 @@ class BatteryService : Service() {
 
 
             createNotificationChannel()
-            registerBroadcastReceiver()
             fetchInitialBatteryState()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startNotificationMonitoring()
@@ -409,6 +520,12 @@ class BatteryService : Service() {
             }
         }
 
+        // Register receiver only after startForeground() so we are in valid foreground state before receiving broadcasts (avoids "Handler on dead thread" when process was killed before startForeground).
+        if (!receiverRegistered) {
+            registerBroadcastReceiver()
+            receiverRegistered = true
+        }
+
         // Start periodic updates (battery changes are handled by batteryBroadcastReceiver)
         try {
             updateNotification()
@@ -531,8 +648,8 @@ class BatteryService : Service() {
                     else -> 0xFF9E9E9E.toInt()
                 }
                 val icon = try {
-                    resources.getDrawable(R.drawable.ic_power, null)
-                    R.drawable.ic_power
+                    resources.getDrawable(R.drawable.ic_climate_status, null)
+                    R.drawable.ic_climate_status
                 } catch (e: Exception) {
                     android.R.drawable.ic_dialog_info
                 }
@@ -630,6 +747,18 @@ class BatteryService : Service() {
                 val prefs = PreferenceManager(applicationContext)
                 val cachedDeviceInfo = prefs.getLastDeviceInfo()
                 val apiClimateStatus = cachedDeviceInfo?.climateStatus
+                
+                // Dismiss station code notification if:
+                // 1. Station is connected (hasStation = true)
+                // 2. OR climate status is green (no station code needed)
+                val hasStation = prefs.getHasStation()
+                val isGreen = apiClimateStatus != null && apiClimateStatus in API_GREEN_CLIMATE_STATUSES
+                
+                if (hasStation || isGreen) {
+                    Log.d(tag, "Dismissing station code notification - hasStation: $hasStation, isGreen: $isGreen")
+                    notificationManager.cancel(STATION_CODE_NOTIFICATION_ID)
+                    stationCodeNotificationShownThisChargingSession = false
+                }
 
                 val description: String
                 val (title, colorInt, iconRes) = if (apiClimateStatus != null) {
@@ -641,8 +770,8 @@ class BatteryService : Service() {
                         else -> 0xFF9E9E9E.toInt()   // Not green - gray
                     }
                     val icon = try {
-                        resources.getDrawable(R.drawable.ic_power, null)
-                        R.drawable.ic_power
+                        resources.getDrawable(R.drawable.ic_climate_status, null)
+                        R.drawable.ic_climate_status
                     } catch (e: Exception) {
                         android.R.drawable.ic_dialog_info
                     }
@@ -651,8 +780,8 @@ class BatteryService : Service() {
                     // Don't show climate result until GetDeviceInfo is available; show loading instead
                     description = "Getting your climate data..."
                     val iconRes = try {
-                        resources.getDrawable(R.drawable.ic_power, null)
-                        R.drawable.ic_power
+                        resources.getDrawable(R.drawable.ic_climate_status, null)
+                        R.drawable.ic_climate_status
                     } catch (e: Exception) {
                         android.R.drawable.ic_dialog_info
                     }
@@ -846,7 +975,10 @@ class BatteryService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            unregisterReceiver(internalBroadcastReceiver)
+            if (receiverRegistered) {
+                unregisterReceiver(internalBroadcastReceiver)
+                receiverRegistered = false
+            }
         } catch (e: Exception) {
             Sentry.withScope { scope ->
                 scope.setTag("operation", "BatteryService.onDestroy")
@@ -857,10 +989,7 @@ class BatteryService : Service() {
         serviceScope.cancel()
     }
 
-    /**
-     * Fetch initial battery state when service starts.
-     * This ensures we have battery data immediately instead of waiting for a broadcast.
-     */
+
     private fun fetchInitialBatteryState() {
         try {
             val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))

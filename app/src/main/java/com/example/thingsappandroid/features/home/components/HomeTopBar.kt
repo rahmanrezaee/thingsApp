@@ -33,22 +33,16 @@ fun HomeTopBar(deviceName: String) {
             contentScale = ContentScale.Fit
         )
 
-        // Device Info
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-
-            Text(
-                text = deviceName,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Gray500,
-                    fontSize = 14.sp
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        // Device Name
+        Text(
+            text = deviceName,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                color = Gray500,
+                fontSize = 14.sp
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -56,6 +50,6 @@ fun HomeTopBar(deviceName: String) {
 @Composable
 fun HomeTopBarPreview() {
     ThingsAppAndroidTheme {
-        HomeTopBar(deviceName = "Android Device")
+        HomeTopBar(deviceName = "Samsung Galaxy S22 Ultra")
     }
 }

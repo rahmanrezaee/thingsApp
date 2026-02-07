@@ -21,27 +21,26 @@ import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.util.ClimateData
 import com.example.thingsappandroid.ui.theme.*
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.outlined.EnergySavingsLeaf
+import androidx.compose.ui.res.painterResource
+import com.example.thingsappandroid.R
 
 @Composable
 fun ClimateStatusCard(
     data: ClimateData = ClimateData(
         "Green",
         "Clean energy, within the 1.5°C carbon limit.",
-        listOf(PrimaryGreen, DarkGreen)
+        listOf(Color(0xFF11B45C), Color(0xFF008C40))
     )
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp) // Slightly taller for better spacing
+            .height(140.dp)
             .shadow(
-                elevation = 12.dp,
+                elevation = 16.dp,
                 shape = Shapes.large,
-                spotColor = data.gradientColors.first().copy(alpha = 0.3f),
-                ambientColor = data.gradientColors.first().copy(alpha = 0.3f)
+                spotColor = data.gradientColors.first().copy(alpha = 0.55f),
+                ambientColor = data.gradientColors.last().copy(alpha = 0.45f)
             )
             .background(
                 brush = Brush.linearGradient(
@@ -82,8 +81,8 @@ fun ClimateStatusCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = "Power",
+                        painter = painterResource(id = R.drawable.ic_climate_status),
+                        contentDescription = "Climate Status",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -110,9 +109,9 @@ fun ClimateStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.EnergySavingsLeaf, // Fallback to leaf or similar
+                    painter = painterResource(id = R.drawable.ic_power),
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = Color.White.copy(alpha = .5f),
                     modifier = Modifier.size(18.dp)
                 )
                 Text(

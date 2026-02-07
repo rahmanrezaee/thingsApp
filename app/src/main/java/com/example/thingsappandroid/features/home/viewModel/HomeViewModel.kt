@@ -22,6 +22,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
+import com.example.thingsappandroid.data.model.DeviceInfoResponse
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.util.BatteryUtil
@@ -38,7 +39,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
+import retrofit2.Response
 import java.util.UUID
 import javax.inject.Inject
 
@@ -61,25 +67,86 @@ class HomeViewModel @Inject constructor(
     // Cached Device ID
     private var cachedDeviceId: String? = null
 
+    /** Friendly device name: e.g. "Samsung SM-S908B", "Xiaomi 12T", "Google Pixel 7 Pro" */
+    private val friendlyDeviceName: String by lazy {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
+
     // Last known WiFi BSSID - when it changes, we refresh device info
     private var lastKnownWifiBssid: String? = null
 
     // Periodic battery update job
     private var batteryUpdateJob: kotlinx.coroutines.Job? = null
 
-    private var wifiBroadcastReceiver: BroadcastReceiver? = null
-    private var locationBroadcastReceiver: BroadcastReceiver? = null
+    /** Single-flight: only one device-info load at a time; repeat callers skip if already loaded for current BSSID. */
+    private val loadDeviceInfoMutex = Mutex()
+    
+    /** Track if initialization has been completed to prevent duplicate calls */
+    private var isInitialized = false
+    
+    /**
+     * Single internal broadcast receiver that handles all broadcast intents
+     */
+    private val internalBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: "null"
+            Log.d(HOME_LOG, "📡 Broadcast received: $action")
+            when (action) {
+                BatteryServiceActions.DEVICEINFO_UPDATED -> handleDeviceInfoUpdated()
+                LocationManager.PROVIDERS_CHANGED_ACTION,
+                LocationManager.MODE_CHANGED_ACTION -> handleLocationChanged(action)
+                WifiManager.NETWORK_STATE_CHANGED_ACTION,
+                ConnectivityManager.CONNECTIVITY_ACTION -> handleWifiConnectivityChanged()
+                else -> Log.d(HOME_LOG, "⚠️ Unknown broadcast action: $action")
+            }
+        }
+    }
+
+    private companion object {
+        private const val HOME_LOG = "HomeViewModel"
+        
+        /**
+         * Helper function to register a broadcast receiver with proper SDK version handling
+         */
+        private fun Context.registerReceiverCompat(
+            receiver: BroadcastReceiver,
+            filter: IntentFilter
+        ) {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                    ContextCompat.registerReceiver(
+                        this,
+                        receiver,
+                        filter,
+                        ContextCompat.RECEIVER_NOT_EXPORTED
+                    )
+                }
+                else -> {
+                    registerReceiver(receiver, filter)
+                }
+            }
+        }
+    }
 
     init {
         lastKnownWifiBssid = preferenceManager.getLastWifiBssid()
-        registerWifiChangeReceiver()
-        registerLocationReceiver()
+        registerBroadcastReceivers()
         dispatch(ActivityIntent.Initialize)
     }
 
     fun dispatch(intent: ActivityIntent) {
         when (intent) {
-            ActivityIntent.Initialize -> initialize()
+            ActivityIntent.Initialize -> {
+                // Only initialize once
+                if (!isInitialized) {
+                    initialize()
+                    isInitialized = true
+                } else {
+                    Log.d(HOME_LOG, "⏭️ Skipping initialization - already initialized")
+                }
+            }
             ActivityIntent.Logout -> performLogout()
             ActivityIntent.NavigateToLogin -> {
                 viewModelScope.launch { _effect.send(ActivityEffect.NavigateToLogin) }
@@ -144,25 +211,30 @@ class HomeViewModel @Inject constructor(
                 _state.update { it.copy(selectedBottomTabIndex = intent.index) }
             }
             ActivityIntent.RefreshData -> {
-                // Check location before refreshing data
-                checkLocationAndLoadDeviceInfo()
+                // User manually requested refresh (pull-to-refresh or retry button)
+                Log.d(HOME_LOG, "📥 Manual refresh requested")
+                viewModelScope.launch {
+                    checkLocationAndLoadDeviceInfo()
+                    Log.d(HOME_LOG, "Device info loaded")
+                }
             }
             ActivityIntent.CheckLocationStatus -> {
                 checkLocationAndLoadDeviceInfo()
             }
             ActivityIntent.LocationEnabled -> {
-                // User enabled location, now proceed with device info loading
+                // User enabled location (returned from Settings), now proceed with device info loading
+                Log.d(HOME_LOG, "📍 Location enabled - refreshing device info")
                 _state.update { 
                     it.copy(
                         isLocationEnabled = true,
                         showLocationEnableDialog = false,
-                        locationRequestSkipped = false
+                        locationRequestSkipped = false,
+                        pendingDeviceInfoLoad = false
                     ) 
                 }
-                if (_state.value.pendingDeviceInfoLoad) {
-                    viewModelScope.launch {
-                        loadDeviceInfoWithRetry()
-                    }
+                // Always refresh when location is enabled - user just came from Settings
+                viewModelScope.launch {
+                    loadDeviceInfo()
                 }
             }
             ActivityIntent.SkipLocationRequest -> {
@@ -194,7 +266,7 @@ class HomeViewModel @Inject constructor(
         val locationEnabled = isLocationEnabled()
         val wifiConnected = isWiFiConnected()
         val skipped = _state.value.locationRequestSkipped
-
+        _state.update { it.copy(isLoading = true, error = null) }
         if (wifiConnected && locationEnabled) {
             _state.update {
                 it.copy(
@@ -203,24 +275,20 @@ class HomeViewModel @Inject constructor(
                     pendingDeviceInfoLoad = false
                 )
             }
-            viewModelScope.launch {
-                loadDeviceInfoWithRetry()
-                // loadDeviceInfoWithRetry saves device info and sends DEVICEINFO_UPDATED for BatteryService.updateNotification()
-            }
-        } else if (wifiConnected && !locationEnabled) {
-            // WiFi on but location off: show dialog and display cached/default data
+            viewModelScope.launch { loadDeviceInfo() }
+        } else if (wifiConnected) {
             if (!skipped) {
                 _state.update { it.copy(showLocationEnableDialog = true) }
             }
             viewModelScope.launch {
-                _state.update { it.copy(isLoading = false) } // Stop refresh indicator immediately (no API call)
+                yield()
                 loadCachedOrDefaultDeviceInfo(setLocationSkipped = false)
             }
         } else {
-            // No WiFi: use local DB or create default, no dialog
-            Log.d("ActivityViewModel", "No WiFi - loading from local DB or creating default")
+            Log.d(HOME_LOG, "No WiFi - loading from local DB or creating default")
+            _state.update { it.copy(wifiAddress = null) }
             viewModelScope.launch {
-                _state.update { it.copy(isLoading = false) } // Stop refresh indicator immediately (no API call)
+                yield()
                 loadCachedOrDefaultDeviceInfo(setLocationSkipped = true)
             }
         }
@@ -271,7 +339,8 @@ class HomeViewModel @Inject constructor(
                 isLoading = false,
                 error = null,
                 locationRequestSkipped = setLocationSkipped,
-                deviceName = deviceInfo.alias ?: Build.MODEL
+                deviceName = friendlyDeviceName,
+                publicName = deviceInfo.alias ?: ""
             )
         }
     }
@@ -366,10 +435,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Loads device info from API. On failure, falls back to cache or default.
+     * Single-flighted: only one load runs at a time so homepage loading always finishes.
+     */
     private suspend fun loadDeviceInfo() {
-        _state.update { it.copy(isLoading = true) }
         val deviceId = getDeviceId()
-
         val (wifiAddress, stationCode) = withContext(Dispatchers.IO) {
             val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
             val station = _state.value.stationCode
@@ -377,173 +448,165 @@ class HomeViewModel @Inject constructor(
         }
 
         if (wifiAddress.isNullOrBlank()) {
-            Log.d("ActivityViewModel", "WiFi address missing - not sending getDeviceInfo request")
+            Log.d(HOME_LOG, "loadDeviceInfo: WiFi address missing - not sending request")
+            _state.update { it.copy(wifiAddress = null) }
             loadCachedOrDefaultDeviceInfo()
             return
         }
 
-        try {
-            Log.d("ActivityViewModel", "WiFi Address: $wifiAddress, Station Code: $stationCode")
-            val response = withContext(Dispatchers.IO) {
-                NetworkModule.api.getDeviceInfo(
-                    DeviceInfoRequest(
-                        deviceId = deviceId,
-                        stationCode = stationCode,
-                        wifiAddress = wifiAddress,
-                        currentVersion = "1.0.0" // Could get from BuildConfig.VERSION_NAME
-                    )
-                )
-            }
+        // Mark BSSID before acquiring mutex to prevent duplicate loads from rapid WiFi broadcasts
+        lastKnownWifiBssid = wifiAddress
+        preferenceManager.saveLastWifiBssid(wifiAddress)
+        _state.update { it.copy(wifiAddress = wifiAddress) }
 
-            if (response.isSuccessful && response.body() != null) {
-                // API returns nested structure: {"Data":{...},"StatusCode":200,"Message":"success"}
-                val apiResponse = response.body()!!
-                val deviceInfo = apiResponse.data
-                if (deviceInfo == null) {
-                    Log.w("ActivityViewModel", "API response has no data field")
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            error = "API response has no data field"
-                        )
-                    }
-                    return
-                }
-                Log.d("ActivityViewModel", "deviceInfo: ${deviceInfo},")
+        loadDeviceInfoMutex.withLock {
+            _state.update { it.copy(isLoading = true, error = null) }
+            val request = DeviceInfoRequest(
+                deviceId = deviceId,
+                stationCode = stationCode,
+                wifiAddress = wifiAddress,
+                currentVersion = "1.0.0"
+            )
 
-                // ClimateStatus is now Int in the response
-                val mappedClimate = deviceInfo.climateStatus?.let { statusInt ->
-                    ClimateUtils.getMappedClimateData(statusInt)
-                } ?: ClimateUtils.getMappedClimateData(null as String?)
-
-                val hasStation = deviceInfo.stationInfo != null
-                preferenceManager.setHasStation(hasStation)
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        deviceInfo = deviceInfo,
-                        avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
-                        totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
-                        carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
-                        stationInfo = deviceInfo.stationInfo, // Set the full StationInfo object
-                        stationName = deviceInfo.stationInfo?.stationName,
-                        isGreenStation = deviceInfo.stationInfo?.isGreen == true,
-                        climateData = mappedClimate,
-                        error = null // Clear any previous errors
-                    )
+            val success = fetchAndProcessDeviceInfo(request, isRetry = false)
+            
+            // If failed due to 401, try token refresh and retry once
+            if (!success && lastResponseCode == 401) {
+                Log.w(HOME_LOG, "loadDeviceInfo: 401 - attempting token refresh")
+                if (refreshToken() != null) {
+                    fetchAndProcessDeviceInfo(request, isRetry = true)
+                } else {
+                    handleAuthFailure()
                 }
-                // Save to cache for next time, then notify BatteryService to update notification
-                preferenceManager.saveLastDeviceInfo(deviceInfo)
-                lastKnownWifiBssid = wifiAddress
-                preferenceManager.saveLastWifiBssid(wifiAddress)
-                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
-            } else {
-                Log.d("ActivityViewModel", "Error: ${response.code()}")
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Failed to load device info: ${response.code()}"
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.d("ActivityViewModel", "Error: ${e.message}")
-            viewModelScope.launch {
-                val deviceIdForSentry = try { getDeviceId() } catch (ex: Exception) { "unknown" }
-                Sentry.withScope { scope ->
-                    scope.setTag("operation", "loadDeviceInfo")
-                    scope.setContexts("device", mapOf("device_id" to deviceIdForSentry))
-                    Sentry.captureException(e)
-                }
-            }
-            _state.update {
-                it.copy(
-                    isLoading = false,
-                    error = "Error loading device info: ${e.message}"
-                )
             }
         }
     }
 
+    /** Tracks the last response code for 401 retry logic */
+    private var lastResponseCode: Int = 0
+
     /**
-     * Loads device info from API once. On failure, falls back to cache or default.
+     * Fetches device info from API and processes the response.
+     * @return true if successful, false otherwise
      */
-    private suspend fun loadDeviceInfoWithRetry() {
-        _state.update { it.copy(isLoading = true, error = null) }
-
-        val deviceId = getDeviceId()
-        val (wifiAddress, stationCode) = withContext(Dispatchers.IO) {
-            val wifi = WifiUtils.getHashedWiFiBSSID(getApplication())
-            val station = _state.value.stationCode
-            Pair(wifi, station)
-        }
-
-        if (wifiAddress.isNullOrBlank()) {
-            Log.d("ActivityViewModel", "WiFi address missing - not sending getDeviceInfo request")
-            loadCachedOrDefaultDeviceInfo()
-            return
-        }
-
+    private suspend fun fetchAndProcessDeviceInfo(request: DeviceInfoRequest, isRetry: Boolean): Boolean {
+        val tag = if (isRetry) "retry" else "loadDeviceInfo"
+        lastResponseCode = 0
+        
         try {
-            val response = withContext(Dispatchers.IO) {
-                NetworkModule.api.getDeviceInfo(
-                    DeviceInfoRequest(
-                        deviceId = deviceId,
-                        stationCode = stationCode,
-                        wifiAddress = wifiAddress,
-                        currentVersion = "1.0.0"
-                    )
-                )
+            val response = withTimeoutOrNull(12_000L) {
+                withContext(Dispatchers.IO) {
+                    NetworkModule.api.getDeviceInfo(request)
+                }
+            }
+            
+            if (response == null) {
+                Log.w(HOME_LOG, "$tag: timed out (12s), falling back to cache")
+                loadCachedOrDefaultDeviceInfo()
+                return false
             }
 
-            if (response.isSuccessful && response.body() != null) {
-                val deviceInfo = response.body()!!.data
-                if (deviceInfo == null) {
-                    Log.d("ActivityViewModel", "API response has no data field")
-                    loadCachedOrDefaultDeviceInfo()
-                    return
-                }
+            lastResponseCode = response.code()
 
-                val mappedClimate = deviceInfo.climateStatus?.let { statusInt ->
-                    ClimateUtils.getMappedClimateData(statusInt)
-                } ?: ClimateUtils.getMappedClimateData(null as String?)
-
-                val hasStation = deviceInfo.stationInfo != null
-                preferenceManager.setHasStation(hasStation)
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        deviceInfo = deviceInfo,
-                        avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
-                        totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
-                        carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
-                        stationInfo = deviceInfo.stationInfo,
-                        stationName = deviceInfo.stationInfo?.stationName,
-                        isGreenStation = deviceInfo.stationInfo?.isGreen == true,
-                        climateData = mappedClimate,
-                        error = null
-                    )
-                }
-                preferenceManager.saveLastDeviceInfo(deviceInfo)
-                lastKnownWifiBssid = wifiAddress
-                preferenceManager.saveLastWifiBssid(wifiAddress)
-                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
-                Log.d("ActivityViewModel", "Device info loaded and saved to cache")
-            } else {
-                Log.d("ActivityViewModel", "getDeviceInfo failed: ${response.code()}")
+            if (response.isSuccessful && response.body()?.data != null) {
+                processDeviceInfoSuccess(response.body()!!.data!!)
+                Log.d(HOME_LOG, "$tag: success")
+                return true
+            }
+            
+            // Log error details
+            val errorBody = runCatching { response.errorBody()?.string() }.getOrNull()
+            Log.w(HOME_LOG, "$tag: failed with code ${response.code()}, error=$errorBody")
+            
+            // Don't fallback to cache on 401 (handled by caller for retry)
+            if (response.code() != 401) {
                 loadCachedOrDefaultDeviceInfo()
             }
+            return false
+            
         } catch (e: Exception) {
-            Log.d("ActivityViewModel", "getDeviceInfo error: ${e.message}")
-            viewModelScope.launch {
-                val deviceIdForSentry = try { getDeviceId() } catch (ex: Exception) { "unknown" }
-                Sentry.withScope { scope ->
-                    scope.setTag("operation", "loadDeviceInfo")
-                    scope.setContexts("device", mapOf("device_id" to deviceIdForSentry))
-                    Sentry.captureException(e)
-                }
-            }
+            Log.e(HOME_LOG, "$tag: error ${e.message}")
+            reportErrorToSentry(e)
             loadCachedOrDefaultDeviceInfo()
+            return false
+        }
+    }
+
+    /**
+     * Processes successful device info response and updates state.
+     */
+    private suspend fun processDeviceInfoSuccess(deviceInfo: DeviceInfoResponse) {
+        val mappedClimate = deviceInfo.climateStatus?.let { 
+            ClimateUtils.getMappedClimateData(it) 
+        } ?: ClimateUtils.getMappedClimateData(null as String?)
+
+        preferenceManager.setHasStation(deviceInfo.stationInfo != null)
+        preferenceManager.saveLastDeviceInfo(deviceInfo)
+        
+        _state.update {
+            it.copy(
+                isLoading = false,
+                deviceInfo = deviceInfo,
+                avoidedEmissions = deviceInfo.totalAvoided?.toFloat() ?: 0f,
+                totalConsumedKwh = deviceInfo.totalConsumed?.toFloat() ?: 0f,
+                carbonIntensity = deviceInfo.carbonInfo?.currentIntensity?.toInt() ?: it.carbonIntensity,
+                stationInfo = deviceInfo.stationInfo,
+                stationName = deviceInfo.stationInfo?.stationName,
+                isGreenStation = deviceInfo.stationInfo?.isGreen == true,
+                climateData = mappedClimate,
+                error = null,
+                deviceName = friendlyDeviceName,
+                publicName = deviceInfo.alias ?: ""
+            )
+        }
+        
+        // Notify BatteryService of update
+        Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+            setPackage(getApplication<Application>().packageName)
+        }.also { getApplication<Application>().sendBroadcast(it) }
+    }
+
+    /**
+     * Refreshes the auth token using the device ID.
+     * @return The new token if successful, null otherwise.
+     */
+    private suspend fun refreshToken(): String? {
+        return try {
+            val deviceId = getDeviceId()
+            Log.d(HOME_LOG, "refreshToken: attempting for deviceId=$deviceId")
+            repository.authenticate(deviceId)?.also { newToken ->
+                tokenManager.saveToken(newToken)
+                NetworkModule.setAuthToken(newToken)
+                Log.d(HOME_LOG, "refreshToken: success")
+            }
+        } catch (e: Exception) {
+            Log.e(HOME_LOG, "refreshToken: error - ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Handles authentication failure - clears token and navigates to login.
+     */
+    private fun handleAuthFailure() {
+        Log.w(HOME_LOG, "handleAuthFailure: clearing token, navigating to login")
+        tokenManager.clearToken()
+        NetworkModule.setAuthToken(null)
+        _state.update { it.copy(isLoading = false) }
+        viewModelScope.launch { _effect.send(ActivityEffect.NavigateToLogin) }
+    }
+
+    /**
+     * Reports exception to Sentry with device context.
+     */
+    private fun reportErrorToSentry(e: Exception) {
+        viewModelScope.launch {
+            val deviceId = runCatching { getDeviceId() }.getOrDefault("unknown")
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "loadDeviceInfo")
+                scope.setContexts("device", mapOf("device_id" to deviceId))
+                Sentry.captureException(e)
+            }
         }
     }
 
@@ -564,19 +627,21 @@ class HomeViewModel @Inject constructor(
             val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
             val calculatedPct = if (level >= 0 && scale > 0) level * 100 / scale else -1
             
-            // Get charging status from sticky broadcast
+            // Get charging status from sticky broadcast using when expression
             val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                    status == BatteryManager.BATTERY_STATUS_FULL
+            val isCharging = when (status) {
+                BatteryManager.BATTERY_STATUS_CHARGING,
+                BatteryManager.BATTERY_STATUS_FULL -> true
+                else -> false
+            }
             
-
-                _state.update {
-                    it.copy(
-                        batteryLevel = calculatedPct.toFloat() / 100,
-                        isCharging = isCharging,
-                        hasBatteryData = true
-                    )
-                }
+            _state.update {
+                it.copy(
+                    batteryLevel = calculatedPct.toFloat() / 100,
+                    isCharging = isCharging,
+                    hasBatteryData = true
+                )
+            }
 
         } catch (e: Exception) {
             Log.e("HomeViewModel", "Error reading battery status", e)
@@ -605,10 +670,12 @@ class HomeViewModel @Inject constructor(
         // Start periodic battery updates every 1 second
         startPeriodicBatteryUpdates()
 
-        // Set Device Name and sync location-skipped from preferences (set on SplashScreen)
+        // Set Device Name, WiFi status, wifiAddress (for About Green-Fi ID), and sync location-skipped from preferences
         _state.update {
             it.copy(
-                deviceName = Build.MODEL,
+                deviceName = friendlyDeviceName,
+                isWifiConnected = isWiFiConnected(),
+                wifiAddress = preferenceManager.getLastWifiBssid(),
                 locationRequestSkipped = preferenceManager.getLocationRequestSkipped()
             )
         }
@@ -652,7 +719,8 @@ class HomeViewModel @Inject constructor(
                         climateData = mappedClimate,
                         isLoading = false,
                         error = null,
-                        deviceName = cachedDeviceInfo.alias ?: Build.MODEL
+                        deviceName = friendlyDeviceName,
+                        publicName = cachedDeviceInfo.alias ?: ""
                     )
                 }
             }
@@ -723,101 +791,77 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Registers a BroadcastReceiver to listen for WiFi/network changes.
-     * When BSSID changes, triggers a device info refresh.
+     * Registers the internal broadcast receiver for all HomeViewModel broadcasts
      */
-    private fun registerWifiChangeReceiver() {
-        if (wifiBroadcastReceiver != null) return
-        wifiBroadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                viewModelScope.launch {
-                    checkWifiAndRefreshIfNeeded()
-                }
-            }
-        }
+    @Suppress("DEPRECATION")
+    private fun registerBroadcastReceivers() {
         val filter = IntentFilter().apply {
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
-        }
-        val app = getApplication<Application>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.registerReceiver(app, wifiBroadcastReceiver!!, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        } else {
-            app.registerReceiver(wifiBroadcastReceiver, filter)
-        }
-        Log.d("HomeViewModel", "WiFi change receiver registered")
-    }
-
-    private fun unregisterWifiChangeReceiver() {
-        wifiBroadcastReceiver?.let { receiver ->
-            try {
-                getApplication<Application>().unregisterReceiver(receiver)
-                Log.d("HomeViewModel", "WiFi change receiver unregistered")
-            } catch (e: Exception) {
-                Log.w("HomeViewModel", "Error unregistering WiFi receiver: ${e.message}")
-            }
-            wifiBroadcastReceiver = null
-        }
-    }
-
-    /**
-     * Registers a BroadcastReceiver to listen for location provider changes.
-     * When location is enabled (e.g. user returns from Settings), triggers checkLocationAndLoadDeviceInfo().
-     */
-    private fun registerLocationReceiver() {
-        if (locationBroadcastReceiver != null) return
-        locationBroadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                Log.d("HomeViewModel", "Location provider changed: ${intent?.action}")
-                checkLocationAndLoadDeviceInfo()
-            }
-        }
-        val filter = IntentFilter().apply {
+            addAction(BatteryServiceActions.DEVICEINFO_UPDATED)
             addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
             addAction(LocationManager.MODE_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
         }
-        val app = getApplication<Application>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.registerReceiver(app, locationBroadcastReceiver!!, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        } else {
-            app.registerReceiver(locationBroadcastReceiver, filter)
-        }
-        Log.d("HomeViewModel", "Location change receiver registered")
+        getApplication<Application>().registerReceiverCompat(internalBroadcastReceiver, filter)
+        Log.d(HOME_LOG, "✅ Internal broadcast receiver registered for WiFi, location and device info updates")
     }
 
-    private fun unregisterLocationReceiver() {
-        locationBroadcastReceiver?.let { receiver ->
-            try {
-                getApplication<Application>().unregisterReceiver(receiver)
-                Log.d("HomeViewModel", "Location change receiver unregistered")
-            } catch (e: Exception) {
-                Log.w("HomeViewModel", "Error unregistering location receiver: ${e.message}")
-            }
-            locationBroadcastReceiver = null
+    /**
+     * Unregisters the internal broadcast receiver
+     */
+    private fun unregisterBroadcastReceivers() {
+        runCatching {
+            getApplication<Application>().unregisterReceiver(internalBroadcastReceiver)
+            Log.d(HOME_LOG, "Internal broadcast receiver unregistered")
+        }.onFailure { e ->
+            Log.w(HOME_LOG, "Error unregistering internal broadcast receiver: ${e.message}")
         }
     }
 
     /**
-     * Checks if WiFi BSSID has changed. If so, triggers device info refresh.
-     * Called on WiFi broadcast and on app resume.
+     * Handles DEVICEINFO_UPDATED broadcast from BatteryService/ClimateStatusManager
      */
-    private suspend fun checkWifiAndRefreshIfNeeded() {
-        val currentBssid = withContext(Dispatchers.IO) {
-            WifiUtils.getHashedWiFiBSSID(getApplication())
+    private fun handleDeviceInfoUpdated() {
+        Log.d(HOME_LOG, "✅ Received DEVICEINFO_UPDATED broadcast - refreshing UI from cache")
+        viewModelScope.launch {
+            lastKnownWifiBssid = preferenceManager.getLastWifiBssid()
+            loadCachedOrDefaultDeviceInfo()
         }
-        if (currentBssid != lastKnownWifiBssid) {
-            Log.d("HomeViewModel", "WiFi BSSID changed: $lastKnownWifiBssid -> $currentBssid, refreshing device info")
-            checkLocationAndLoadDeviceInfo()
+    }
+
+    /**
+     * Handles location provider changes
+     */
+    private fun handleLocationChanged(action: String) {
+        Log.d(HOME_LOG, "Location provider changed: $action")
+        checkLocationAndLoadDeviceInfo()
+    }
+
+    /**
+     * Handles WiFi connectivity changes. Updates isWifiConnected and wifiAddress (Green-Fi ID)
+     * so About and other UI stay in sync when user toggles WiFi.
+     */
+    private fun handleWifiConnectivityChanged() {
+        val isConnected = isWiFiConnected()
+        Log.d(HOME_LOG, "WiFi connectivity changed: isConnected=$isConnected")
+        if (!isConnected) {
+            _state.update { it.copy(isWifiConnected = false, wifiAddress = null) }
+            return
+        }
+        _state.update { it.copy(isWifiConnected = true) }
+        viewModelScope.launch {
+            val bssid = withContext(Dispatchers.IO) {
+                WifiUtils.getHashedWiFiBSSID(getApplication())
+            }
+            _state.update { it.copy(wifiAddress = bssid) }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        unregisterWifiChangeReceiver()
-        unregisterLocationReceiver()
+        unregisterBroadcastReceivers()
         batteryUpdateJob?.cancel()
         batteryUpdateJob = null
-        Log.d("HomeViewModel", "Periodic battery updates cancelled")
+        Log.d(HOME_LOG, "HomeViewModel cleared - cancelled all jobs")
     }
 }

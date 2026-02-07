@@ -27,19 +27,19 @@ object ClimateUtils {
     private val greenData = ClimateData(
         title = "Green",
         description = "Clean energy, within the 1.5°C carbon limit.",
-        gradientColors = listOf(PrimaryGreen, DarkGreen)
+        gradientColors = listOf(Color(0xFF11B45C), Color(0xFF008C40))
     )
 
     private val notGreenData = ClimateData(
         title = "Not Green",
         description = "Energy source exceeds carbon limits.",
-        gradientColors = listOf(Color(0xFFE57373), Color(0xFFD32F2F)) // Red gradient
+        gradientColors = listOf(Color(0xFFD93939), Color(0xFFB52E2E))
     )
 
     private val alignedData = ClimateData(
         title = "1.5°C Aligned",
         description = "Within carbon budget. Switch to green electricity if possible.",
-        gradientColors = listOf(Color(0xFFFF9800), Color(0xFFF57C00)) // Orange gradient for 1.5°C Aligned
+        gradientColors = listOf(Color(0xFFDA9A21), Color(0xFFB57D0C))
     )
 
     /** ClientStatus mapping: 0,1,2,3,4 = Not green; 5,6,7,9 = Green; 8 = 1.5°C Aligned. */

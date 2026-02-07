@@ -201,7 +201,9 @@ class StationCodeHandler(private val context: Context) {
                     deviceInfo.stationInfo?.let { Log.d(TAG, "💾 Stored station info: ${it.stationName}") }
                     
                     // Broadcast after save – BatteryService checks Preference has_station
-                    val successIntent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED)
+                    val successIntent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+                        setPackage(context.packageName)
+                    }
                     context.sendBroadcast(successIntent)
                 }
             } else {

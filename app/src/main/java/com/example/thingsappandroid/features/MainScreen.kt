@@ -1,9 +1,11 @@
 package com.example.thingsappandroid.features
 
+import android.app.Activity
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -14,6 +16,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -39,6 +45,24 @@ fun MainScreen(
     val currentTab = state.selectedBottomTabIndex
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Back: first press shows "Press back again to exit"; second press within 2s exits; otherwise reset
+    var lastBackPressTime by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(lastBackPressTime) {
+        lastBackPressTime ?: return@LaunchedEffect
+        delay(2000)
+        lastBackPressTime = null
+    }
+    BackHandler {
+        val now = System.currentTimeMillis()
+        val last = lastBackPressTime
+        if (last == null || now - last > 2000) {
+            lastBackPressTime = now
+            Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+        } else {
+            (context as? Activity)?.finish()
+        }
+    }
 
     // Re-check location when user returns from settings (e.g. after enabling location)
     DisposableEffect(lifecycleOwner) {

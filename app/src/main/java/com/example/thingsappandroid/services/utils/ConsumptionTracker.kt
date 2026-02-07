@@ -17,13 +17,15 @@ import com.example.thingsappandroid.util.WifiUtils
 import com.google.gson.Gson
 import io.sentry.Sentry
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
  * Handles consumption tracking during charging sessions.
- * Records measurements every 5 seconds and stores offline when needed.
+ * Records measurements every 10 seconds and batches them for upload every 10 minutes.
  */
 class ConsumptionTracker(
     private val context: Context,
@@ -38,8 +40,14 @@ class ConsumptionTracker(
     private var consumptionStartLevel: Int = 0
     private var consumptionStartVoltage: Int = 0
     
+    // Batch collection for 10-minute uploads
+    private val measurementBatch = mutableListOf<AndroidMeasurementModel>()
+    private val batchMutex = Mutex()
+    private var lastBatchUploadTime: Long = System.currentTimeMillis()
+    
     companion object {
-        const val CONSUMPTION_INTERVAL_MS = 10 * 1000L // 10 seconds - always add composition (local or API)
+        const val CONSUMPTION_INTERVAL_MS = 10 * 1000L // 10 seconds - measurement interval
+        private const val BATCH_UPLOAD_INTERVAL_MS = 10 * 60 * 1000L // 10 minutes - upload interval
         private const val MIN_DURATION_MS = 1_000L // 1 second
     }
     
@@ -55,12 +63,15 @@ class ConsumptionTracker(
     
     /**
      * Stop tracking and record final consumption when charging stops
+     * Also uploads any remaining batch
      */
     suspend fun stopTracking(level: Int, voltage: Int) {
         if (consumptionStartTime > 0) {
             recordConsumption(level, voltage, isCharging = true, isFinal = true)
+            // Upload any remaining measurements in batch
+            uploadBatch()
             resetTracking()
-            Log.d(TAG, "Stopped consumption tracking")
+            Log.d(TAG, "Stopped consumption tracking and uploaded final batch")
         }
     }
     
@@ -96,8 +107,24 @@ class ConsumptionTracker(
                 BatteryUtil.getBatteryCapacity(context)
             }
             
-            // Average current: (capacity_mAh * levelDelta/100) / duration_h = mA. Convert to A for power and API.
-            val avgAmpereMa = if (durationHours > 0) (batteryCapacityMah * (levelDelta / 100.0)) / durationHours else 0.0
+            // Try to get real-time current measurement (in microamps, negative when charging)
+            val currentNowMicroAmps = try {
+                batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+            } catch (e: Exception) {
+                0
+            }
+            
+            // Calculate average current using real-time measurement OR battery level delta
+            val avgAmpereMa = if (currentNowMicroAmps != 0) {
+                // Use real-time current (convert µA to mA, make positive for charging)
+                kotlin.math.abs(currentNowMicroAmps / 1000.0)
+            } else if (durationHours > 0) {
+                // Fallback: calculate from level change
+                (batteryCapacityMah * (levelDelta / 100.0)) / durationHours
+            } else {
+                0.0
+            }
+            
             val avgAmpereA = avgAmpereMa / 1000.0
             // Power: P = V * I (volts * amperes = watts). Voltage in mV -> V, current in mA -> A.
             val watts = (avgVoltageMv / 1000.0) * avgAmpereA
@@ -154,22 +181,19 @@ class ConsumptionTracker(
                 longitude = longitude
             )
             
-            Log.d(TAG, "Recording consumption (${if(isCharging) "Charging" else "Battery"}): ${wattHours}Wh, Level: $consumptionStartLevel% -> $currentLevel%")
+            val measurementMethod = if (currentNowMicroAmps != 0) "real-time current" else "level delta"
+            Log.d(TAG, "Recording consumption (${if(isCharging) "Charging" else "Battery"}): ${String.format("%.3f", wattHours)}Wh, Level: $consumptionStartLevel% -> $currentLevel%, Method: $measurementMethod, Current: ${String.format("%.1f", avgAmpereMa)}mA")
             
             // Restart interval for continuous tracking
             consumptionStartTime = now
             consumptionStartLevel = currentLevel
             consumptionStartVoltage = currentVoltage
 
-            // Check if we have WiFi and location
-            val hasWifi = wifiBssid != null
-            val hasLocation = latitude != 0.0 || longitude != 0.0
+            // Add to batch for later upload
+            addToBatch(measurement)
             
-            if (hasWifi && hasLocation) {
-                uploadConsumption(measurement)
-            } else {
-                saveToLocalDb(measurement)
-            }
+            // Check if it's time to upload the batch (every 10 minutes)
+            checkAndUploadBatch()
             
         } catch (e: Exception) {
             Log.e(TAG, "Error recording consumption", e)
@@ -177,44 +201,97 @@ class ConsumptionTracker(
     }
     
     /**
-     * Upload consumption to server
+     * Add measurement to batch for later upload
      */
-    private suspend fun uploadConsumption(measurement: AndroidMeasurementModel) {
-        try {
-            val api = NetworkModule.provideThingsApiService(context)
-            val response = api.addDeviceConsumption(measurement)
-            
-            if (response.isSuccessful) {
-                Log.d(TAG, "✅ Consumption uploaded successfully")
-                // Try to sync any pending consumptions
-                syncPendingConsumptions()
-            } else {
-                Log.w(TAG, "⚠️ Consumption upload failed: ${response.code()}, saving to local DB")
-                saveToLocalDb(measurement)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error uploading consumption: ${e.message}, saving to local DB")
-            saveToLocalDb(measurement)
+    private suspend fun addToBatch(measurement: AndroidMeasurementModel) {
+        batchMutex.withLock {
+            measurementBatch.add(measurement)
+            Log.d(TAG, "📊 Added to batch. Current batch size: ${measurementBatch.size}")
         }
     }
     
     /**
-     * Save consumption to local database
+     * Check if 10 minutes have passed and upload batch if needed
      */
-    private suspend fun saveToLocalDb(measurement: AndroidMeasurementModel) {
+    private suspend fun checkAndUploadBatch() {
+        val now = System.currentTimeMillis()
+        val timeSinceLastUpload = now - lastBatchUploadTime
+        
+        if (timeSinceLastUpload >= BATCH_UPLOAD_INTERVAL_MS) {
+            uploadBatch()
+        }
+    }
+    
+    /**
+     * Upload all measurements collected in the last 10 minutes
+     */
+    suspend fun uploadBatch() {
+        batchMutex.withLock {
+            if (measurementBatch.isEmpty()) {
+                Log.d(TAG, "📭 No measurements in batch to upload")
+                return
+            }
+            
+            val batchSize = measurementBatch.size
+            Log.d(TAG, "📤 Uploading batch of $batchSize measurements from last 10 minutes...")
+            
+            try {
+                // Check if we have WiFi and location for at least one measurement
+                val hasValidMeasurement = measurementBatch.any { 
+                    it.wifiAddress != null && (it.latitude != 0.0 || it.longitude != 0.0)
+                }
+                
+                if (hasValidMeasurement) {
+                    // Try to upload batch to server
+                    val api = NetworkModule.provideThingsApiService(context)
+                    val response = api.addDeviceConsumptionRange(measurementBatch)
+                    
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "✅ Successfully uploaded batch of $batchSize measurements")
+                        // Clear the batch after successful upload
+                        measurementBatch.clear()
+                        lastBatchUploadTime = System.currentTimeMillis()
+                        
+                        // Try to sync any pending consumptions from local DB
+                        syncPendingConsumptions()
+                    } else {
+                        Log.w(TAG, "⚠️ Batch upload failed: ${response.code()}, saving to local DB")
+                        saveBatchToLocalDb()
+                    }
+                } else {
+                    // No WiFi/location, save to local DB
+                    Log.d(TAG, "💾 No WiFi/location available, saving batch to local DB")
+                    saveBatchToLocalDb()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error uploading batch: ${e.message}, saving to local DB")
+                saveBatchToLocalDb()
+            }
+        }
+    }
+    
+    /**
+     * Save entire batch to local database
+     */
+    private suspend fun saveBatchToLocalDb() {
         try {
-            val json = gson.toJson(measurement)
-            val entity = ConsumptionEntity(modelJson = json)
-            database.consumptionDao().insert(entity)
-            Log.d(TAG, "💾 Consumption saved to local DB")
+            measurementBatch.forEach { measurement ->
+                val json = gson.toJson(measurement)
+                val entity = ConsumptionEntity(modelJson = json)
+                database.consumptionDao().insert(entity)
+            }
+            Log.d(TAG, "💾 Batch of ${measurementBatch.size} measurements saved to local DB")
+            measurementBatch.clear()
+            lastBatchUploadTime = System.currentTimeMillis()
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving consumption to local DB", e)
+            Log.e(TAG, "Error saving batch to local DB", e)
             Sentry.withScope { scope ->
-                scope.setTag("operation", "saveConsumptionToLocalDb")
+                scope.setTag("operation", "saveBatchToLocalDb")
                 Sentry.captureException(e)
             }
         }
     }
+    
     
     /**
      * Sync pending consumptions from local DB to server
@@ -276,7 +353,29 @@ class ConsumptionTracker(
     }
     
     /**
-     * Get interval duration in milliseconds
+     * Get measurement interval duration in milliseconds
      */
     fun getIntervalMs(): Long = CONSUMPTION_INTERVAL_MS
+    
+    /**
+     * Get batch upload interval duration in milliseconds
+     */
+    fun getBatchUploadIntervalMs(): Long = BATCH_UPLOAD_INTERVAL_MS
+    
+    /**
+     * Get current batch size for monitoring
+     */
+    suspend fun getBatchSize(): Int {
+        return batchMutex.withLock {
+            measurementBatch.size
+        }
+    }
+    
+    /**
+     * Force upload batch immediately (useful for testing or manual sync)
+     */
+    suspend fun forceUploadBatch() {
+        Log.d(TAG, "🔄 Force uploading batch...")
+        uploadBatch()
+    }
 }

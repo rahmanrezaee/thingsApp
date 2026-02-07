@@ -55,7 +55,13 @@ fun AboutScreen(
     val state = activityViewModel.state.collectAsStateWithLifecycle()
     val deviceInfo = state.value.deviceInfo
     val deviceId = deviceInfo?.deviceId ?: "—"
-    val thingId = deviceInfo?.thingId ?: "—"
+    val deviceName = state.value.deviceName
+    val wifiAddress = state.value.wifiAddress
+    val greenFiValue = if (wifiAddress.isNullOrBlank()) {
+        "There is no Green-Fi connected."
+    } else {
+        wifiAddress
+    }
     val version = BuildConfig.VERSION_NAME.ifBlank { "1.0" }
 
     Column(
@@ -71,6 +77,15 @@ fun AboutScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             AboutIdRow(
+                label = "Device",
+                value = deviceName.ifBlank { "—" },
+                onCopy = {
+                    copyToClipboard(context, "Device", deviceName)
+                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            AboutIdRow(
                 label = "Device Unique Identifier",
                 value = deviceId,
                 onCopy = {
@@ -81,9 +96,9 @@ fun AboutScreen(
             Spacer(modifier = Modifier.height(12.dp))
             AboutIdRow(
                 label = "Green-Fi Unique Identifier",
-                value = thingId,
+                value = greenFiValue,
                 onCopy = {
-                    copyToClipboard(context, "Green-Fi ID", thingId)
+                    copyToClipboard(context, "Green-Fi ID", greenFiValue)
                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                 }
             )

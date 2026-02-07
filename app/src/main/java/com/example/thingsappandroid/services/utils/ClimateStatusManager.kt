@@ -1,5 +1,6 @@
 package com.example.thingsappandroid.services.utils
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -7,6 +8,7 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.model.SetClimateStatusRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.services.API_GREEN_CLIMATE_STATUSES
 import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
@@ -73,6 +75,8 @@ class ClimateStatusManager(private val context: Context) {
             null
         }
     }
+
+
     
     /**
      * Call SetClimateStatus API when charging starts
@@ -115,7 +119,7 @@ class ClimateStatusManager(private val context: Context) {
             }
 
             // Call GetDeviceInfo (wiFiAddress is mandatory; we already checked !wiFiAddress.isNullOrBlank())
-            getDeviceInfoOnChargingStart(deviceId!!, wiFiAddress!!)
+            getDeviceInfoOnChargingStart(deviceId, wiFiAddress)
             
         } catch (e: Exception) {
             Log.e(TAG, "setClimateStatus error: ${e.message}", e)
@@ -180,10 +184,23 @@ class ClimateStatusManager(private val context: Context) {
                     prefManager.setHasStation(hasStation)
                     if (deviceInfo.stationInfo != null) {
                         prefManager.saveStationInfo(deviceInfo.stationInfo)
-                        prefManager.saveStationCode(deviceInfo.stationInfo!!.stationCode)
+                        prefManager.saveStationCode(deviceInfo.stationInfo.stationCode)
+                    }
+                    prefManager.saveLastWifiBssid(wiFiAddress)
+                    
+                    // If climate status is green, dismiss all station code notifications
+                    val climateStatus = deviceInfo.climateStatus
+                    if (climateStatus != null && climateStatus in API_GREEN_CLIMATE_STATUSES) {
+                        Log.d(TAG, "Climate status is green ($climateStatus), dismissing station code notifications")
+                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        notificationManager.cancel(2) // STATION_CODE_NOTIFICATION_ID
                     }
                     
-                    context.sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
+                    // Single broadcast: HomeViewModel & BatteryService both listen to this
+                    val intent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+                        setPackage(context.packageName) // Make it explicit for same-app delivery
+                    }
+                    context.sendBroadcast(intent)
                 }
             } else {
                 Log.w(TAG, "getDeviceInfo failed: ${response?.code() ?: "timeout"}")

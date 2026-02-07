@@ -34,7 +34,7 @@ fun CarbonCard(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Carbon Battery",
+                        text = "Carbon",
                         style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
                     )
                     Text(
@@ -43,36 +43,39 @@ fun CarbonCard(
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(
-                    modifier = Modifier.padding(start = 56.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.End
+                // Battery icon + value text centered in remaining space
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = String.format("%.2f ", currentUsage),
-                        style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
+                    BatteryLiquidIndicator(
+                        modifier = Modifier
+                            .width(44.dp)
+                            .height(70.dp),
+                        level = (currentUsage / totalCapacity).coerceIn(0f, 1f),
+                        isAnimating = false,
+                        colorStart = Gray600,
+                        colorEnd = Gray800
                     )
-                    HorizontalDivider(color = Gray300, thickness = 1.dp)
-                    Text(
-                        text = "gCO₂e ",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = String.format("%.2f", currentUsage),
+                            style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
+                        )
+                        Text(
+                            text = "gCO₂e",
+                            style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
+                        )
+                    }
                 }
             }
-
-            BatteryLiquidIndicator(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 21.dp, bottom = 21.dp)
-                    .width(38.dp)
-                    .height(70.dp),
-                level = (currentUsage / totalCapacity).coerceIn(0f, 1f),
-                isAnimating = false,
-                colorStart = Gray600,
-                colorEnd = Gray800
-            )
         }
     }
 }

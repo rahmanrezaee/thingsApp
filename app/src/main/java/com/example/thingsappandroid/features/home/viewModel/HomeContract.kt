@@ -12,6 +12,7 @@ data class HomeState(
     val hasBatteryData: Boolean = false, // Tracks if we've received real battery data
     val batteryCapacityMwh: Int? = null, // Battery capacity in mWh
     val deviceName: String = "",
+    val publicName: String = "",
 
     // Device Info from API
     val deviceInfo: DeviceInfoResponse? = null,
@@ -46,6 +47,9 @@ data class HomeState(
     val selectedBottomTabIndex: Int = 0,
 
     // WiFi/Offline Mode
+    val isWifiConnected: Boolean = false,
+    /** Current hashed WiFi BSSID (Green-Fi Unique Identifier). null when no WiFi / not available. */
+    val wifiAddress: String? = null,
     val isOfflineMode: Boolean = false,
     val wifiErrorReason: String? = null,
     val wifiErrorDetails: String? = null,

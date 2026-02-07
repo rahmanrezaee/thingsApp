@@ -247,18 +247,25 @@ class MainActivity : ComponentActivity() {
             startChargingDetectionService()
         }
         
-        // Re-check WiFi status when user returns from settings
-        // Only get HomeViewModel and dispatch when onboarding is completed; otherwise we would
-        // create HomeViewModel on first launch (onboarding screen) and trigger getDeviceInfo calls.
+        // Only refresh if user just enabled location permission (returned from Settings)
+        // This handles the case where user enables location and we need to fetch device info
         if (!preferenceManager.isOnboardingCompleted()) {
             return
         }
-        try {
-            val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
-            viewModel.dispatch(ActivityIntent.ShowWifiError)
-            viewModel.dispatch(ActivityIntent.RefreshData)
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to refresh WiFi status on resume: ${e.message}")
+        
+        // Check if location permission state actually changed
+        val locationJustEnabled = hasRequiredPermissions && !previousPermissions
+        
+        if (locationJustEnabled) {
+            Log.d("MainActivity", "Location permission just enabled - notifying ViewModel")
+            try {
+                val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
+                viewModel.dispatch(ActivityIntent.LocationEnabled)
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed to notify ViewModel of location change: ${e.message}")
+            }
+        } else {
+            Log.d("MainActivity", "No permission change detected - skipping refresh")
         }
     }
 

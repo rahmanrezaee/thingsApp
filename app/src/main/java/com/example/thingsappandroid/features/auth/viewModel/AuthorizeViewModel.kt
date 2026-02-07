@@ -21,7 +21,8 @@ data class AuthorizeUiState(
     val isLoading: Boolean = false,
     val isSuccess: Boolean = false,
     val error: String? = null,
-    val isInitialized: Boolean = false
+    val isInitialized: Boolean = false,
+    val climateStatus: Int? = null
 )
 
 @HiltViewModel
@@ -44,32 +45,65 @@ class AuthorizeViewModel @Inject constructor(
             _uiState.update { it.copy(isInitializing = true, error = null) }
             
             try {
+                android.util.Log.d("AuthorizeViewModel", "=== Initialization Started ===")
+                
                 // 1. Ensure Device ID
                 val deviceId = Settings.Secure.getString(
                     getApplication<Application>().contentResolver,
                     Settings.Secure.ANDROID_ID
                 ) ?: UUID.randomUUID().toString()
+                android.util.Log.d("AuthorizeViewModel", "Device ID: $deviceId")
 
                 // 2. Ensure Authentication
                 var token = tokenManager.getToken()
                 if (token == null) {
+                    android.util.Log.d("AuthorizeViewModel", "No token found, authenticating...")
                     token = repository.authenticate(deviceId)
                     if (token != null) {
                         tokenManager.saveToken(token)
                         NetworkModule.setAuthToken(token)
+                        android.util.Log.d("AuthorizeViewModel", "Token obtained and saved")
+                    } else {
+                        android.util.Log.e("AuthorizeViewModel", "Failed to authenticate")
                     }
                 } else {
                     NetworkModule.setAuthToken(token)
+                    android.util.Log.d("AuthorizeViewModel", "Using existing token")
                 }
 
-                // 3. Sync/Load Data
+                // 3. Fetch Device Info from Backend
                 if (token != null) {
-                    repository.syncDeviceInfo(context = getApplication(), deviceId = deviceId, stationCode = null)
-                    _uiState.update { it.copy(isInitializing = false, isInitialized = true) }
+                    // Load cached info first for immediate display
+                    val cachedInfo = repository.getLastDeviceInfo()
+                    android.util.Log.d("AuthorizeViewModel", "Cached climate status: ${cachedInfo?.climateStatus}")
+                    if (cachedInfo?.climateStatus != null) {
+                        _uiState.update { it.copy(climateStatus = cachedInfo.climateStatus) }
+                    }
+
+                    // Fetch fresh data from backend
+                    android.util.Log.d("AuthorizeViewModel", "Fetching device info from backend...")
+                    val updatedInfo = repository.syncDeviceInfo(
+                        context = getApplication(), 
+                        deviceId = deviceId, 
+                        stationCode = null
+                    )
+                    
+                    android.util.Log.d("AuthorizeViewModel", "Backend response - climate status: ${updatedInfo?.climateStatus}")
+                    
+                    _uiState.update { 
+                        it.copy(
+                            isInitializing = false, 
+                            isInitialized = true,
+                            climateStatus = updatedInfo?.climateStatus ?: it.climateStatus
+                        ) 
+                    }
+                    android.util.Log.d("AuthorizeViewModel", "✅ Initialization complete. Final climate status: ${_uiState.value.climateStatus}")
                 } else {
+                    android.util.Log.e("AuthorizeViewModel", "❌ No token available")
                     _uiState.update { it.copy(isInitializing = false, error = "Connection failed. Please ensure you are online.") }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("AuthorizeViewModel", "❌ Initialization error: ${e.message}", e)
                 _uiState.update { it.copy(isInitializing = false, error = "Initialization error: ${e.message}") }
             }
         }

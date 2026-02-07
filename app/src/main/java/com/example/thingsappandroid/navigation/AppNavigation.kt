@@ -450,6 +450,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 sessionId = sessionId,
                 isInitializing = state.isInitializing,
                 isLoading = state.isLoading,
+                climateStatusInt = state.climateStatus,
                 onAuthorize = {
                     if (!state.isLoading && !state.isInitializing) {
                         authorizeViewModel.authorize(

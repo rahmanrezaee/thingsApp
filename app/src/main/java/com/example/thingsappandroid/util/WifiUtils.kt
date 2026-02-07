@@ -155,32 +155,25 @@ object WifiUtils {
                 )
             }
 
-            // Validate BSSID format and type
-            if (!isValidBSSID(bssid)) {
-                // Check specific reason for invalid BSSID
-                val firstOctet = bssid.substring(0, 2).toIntOrNull(16) ?: 0
-                val isLocallyAdministered = (firstOctet and 0x02) != 0
-                
-                if (isLocallyAdministered) {
-                    Log.w(TAG, "BSSID is locally administered (virtual network): $bssid")
-                    return WifiBssidResult(
-                        bssid = null,
-                        success = false,
-                        errorReason = WifiFailureReason.LOCALLY_ADMINISTERED.userMessage,
-                        errorDetails = WifiFailureReason.LOCALLY_ADMINISTERED.technicalDetails
-                    )
-                } else {
-                    Log.w(TAG, "BSSID format is invalid: $bssid")
-                    return WifiBssidResult(
-                        bssid = null,
-                        success = false,
-                        errorReason = WifiFailureReason.INVALID_BSSID.userMessage,
-                        errorDetails = WifiFailureReason.INVALID_BSSID.technicalDetails
-                    )
-                }
+            // Validate BSSID format (allow locally administered / virtual so getDeviceInfo can still be called)
+            if (!isValidBSSIDFormat(bssid)) {
+                Log.w(TAG, "BSSID format is invalid: $bssid")
+                return WifiBssidResult(
+                    bssid = null,
+                    success = false,
+                    errorReason = WifiFailureReason.INVALID_BSSID.userMessage,
+                    errorDetails = WifiFailureReason.INVALID_BSSID.technicalDetails
+                )
             }
 
-            // Success - return hashed BSSID
+            // Log when using virtual/tethered BSSID but still hash and return so getDeviceInfo runs
+            val firstOctet = bssid.substring(0, 2).toIntOrNull(16) ?: 0
+            val isLocallyAdministered = (firstOctet and 0x02) != 0
+            if (isLocallyAdministered) {
+                Log.w(TAG, "BSSID is locally administered (virtual/tethered network): $bssid - using hashed value for getDeviceInfo")
+            }
+
+            // Success - return hashed BSSID (including virtual networks so device info can be fetched)
             val hashedBssid = simpleHash(bssid)
             Log.d(TAG, "✓ Valid WiFi connection - SSID: $ssid, BSSID hashed successfully")
             return WifiBssidResult(
@@ -275,13 +268,13 @@ object WifiUtils {
     }
 
     /**
-     * Validates if a BSSID is a real WiFi access point address.
-     * Rejects locally administered addresses and common invalid patterns.
-     * 
+     * Validates BSSID format only. Does not reject locally administered (virtual/tethered) BSSIDs
+     * so that getDeviceInfo can still be called on hotspots/tethering and return cached or default data.
+     *
      * @param bssid The BSSID string to validate (format: "xx:xx:xx:xx:xx:xx")
-     * @return true if the BSSID appears to be valid, false otherwise
+     * @return true if format is valid, false otherwise
      */
-    private fun isValidBSSID(bssid: String): Boolean {
+    private fun isValidBSSIDFormat(bssid: String): Boolean {
         // Check format (should be xx:xx:xx:xx:xx:xx)
         if (!bssid.matches(Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"))) {
             Log.w(TAG, "BSSID format invalid: $bssid")
@@ -294,20 +287,13 @@ object WifiUtils {
             return false
         }
 
-        // Reject locally administered addresses (02:00:00:00:00:00 pattern)
-        // The second least significant bit of the first octet indicates locally administered
-        val firstOctet = bssid.substring(0, 2).toInt(16)
-        if ((firstOctet and 0x02) != 0) {
-            Log.w(TAG, "BSSID is locally administered (virtual/tethered network): $bssid")
-            return false
-        }
-
         // Reject broadcast address (ff:ff:ff:ff:ff:ff)
         if (bssid.equals("ff:ff:ff:ff:ff:ff", ignoreCase = true)) {
             Log.w(TAG, "BSSID is broadcast address")
             return false
         }
 
+        // Allow locally administered (virtual/tethered) BSSIDs - we hash and send so getDeviceInfo runs
         return true
     }
 }

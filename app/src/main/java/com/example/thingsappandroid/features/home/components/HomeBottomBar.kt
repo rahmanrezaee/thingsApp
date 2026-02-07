@@ -35,7 +35,7 @@ fun HomeBottomBar(
         ) {
             val items = listOf(
                 BottomNavData("Home", R.drawable.ic_nav_home_filled, R.drawable.ic_nav_home, 0),
-                BottomNavData("Activity", R.drawable.ic_nav_activity, R.drawable.ic_nav_activity_outline, 1),
+                BottomNavData("ClimateIn", R.drawable.ic_nav_activity, R.drawable.ic_nav_activity_outline, 1),
                 BottomNavData("Marketplace", R.drawable.ic_nav_shop_filled, R.drawable.ic_nav_shop_outline, 2),
                 BottomNavData("Profile", R.drawable.ic_nav_profile_filled, R.drawable.ic_nav_profile, 3)
             )

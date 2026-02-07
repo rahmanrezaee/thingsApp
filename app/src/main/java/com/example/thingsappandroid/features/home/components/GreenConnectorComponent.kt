@@ -23,11 +23,12 @@ import com.example.thingsappandroid.ui.theme.*
 @Composable
 fun GreenConnectorComponent(
     stationInfo: StationInfo? = null,
+    isWifiConnected: Boolean = true,
     onEnterCodeClick: (() -> Unit)? = null
 ) {
-    // Determine connection state and colors
-    val isConnected = stationInfo != null
-    val isGreen = stationInfo?.isGreen == true
+    // If no WiFi, treat as not connected regardless of stationInfo
+    val isConnected = isWifiConnected && stationInfo != null
+    val isGreen = isWifiConnected && stationInfo?.isGreen == true
     
     // Status color: green if connected and green, red if connected but not green, gray if not connected
     val statusColor = when {
@@ -36,8 +37,8 @@ fun GreenConnectorComponent(
         else -> Gray400
     }
     
-    // Icon circle background: green when status is green, gray otherwise
-    val iconCircleBackground = if (isGreen) ActivityGreen else Color(0xFFF5F5F5)
+    // Icon circle background: always grey, only the icon changes
+    val iconCircleBackground = Color(0xFFF5F5F5)
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.TopEnd) {
@@ -67,6 +68,7 @@ fun GreenConnectorComponent(
         Spacer(modifier = Modifier.height(12.dp))
 
         val text = when {
+            !isWifiConnected -> "No Station"
             !isConnected -> "No GreenFi\nConnected"
             stationInfo?.stationName != null && stationInfo.stationName.isNotBlank() -> "${stationInfo.stationName}\nConnected"
             else -> "GreenFi\nConnected"
@@ -83,8 +85,8 @@ fun GreenConnectorComponent(
             textAlign = TextAlign.Center
         )
         
-        // Show "Enter Code" button if station is not green (no connection or connected but not green)
-        if (!isGreen && onEnterCodeClick != null) {
+        // Show "Enter Code" button if station is not green (no connection or connected but not green) and WiFi is connected
+        if (isWifiConnected && !isGreen && onEnterCodeClick != null) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Enter Code",

@@ -20,6 +20,7 @@ class StationCodeReceiver : BroadcastReceiver() {
                 // Send broadcast to notify BatteryService to update immediately with the code
                 val updateIntent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
                     putExtra("station_code", stationCode.trim())
+                    setPackage(context.packageName)
                 }
                 context.sendBroadcast(updateIntent)
                 

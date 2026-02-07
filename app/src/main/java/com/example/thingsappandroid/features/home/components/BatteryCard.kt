@@ -1,8 +1,6 @@
 package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,47 +37,50 @@ fun BatteryCard(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Device Battery",
+                        text = "Electricity",
                         style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
                     )
                     Text(
                         text = batteryCapacityMwh?.let { capacity ->
                             NumberFormat.getNumberInstance(Locale.US).format(capacity) + " mWh"
-                        } ?: "80,000 mWh", // Fallback to default if capacity not available
+                        } ?: "80,000 mWh",
                         style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(
-                    modifier = Modifier.padding(start = 56.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Battery icon + value text centered in remaining space
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (hasValidData) "${(batteryLevel * 100).toInt()}%" else "--",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = if (hasValidData) Gray800 else Gray400
-                        )
+                    BatteryLiquidIndicator(
+                        modifier = Modifier
+                            .width(44.dp)
+                            .height(70.dp),
+                        level = batteryLevel,
+                        isAnimating = isCharging,
+                        colorStart = BatteryGradientStart,
+                        colorEnd = BatteryGradientEnd
                     )
-                    HorizontalDivider(color = Gray300, thickness = 1.dp)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        if (isCharging && hasValidData) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = "Charging",
-                                tint = BatteryYellow,
-                                modifier = Modifier.size(12.dp)
+                        Text(
+                            text = if (hasValidData) "${(batteryLevel * 100).toInt()}%" else "--",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                color = if (hasValidData) Gray800 else Gray400
                             )
-                        }
+                        )
                         Text(
                             text = when {
                                 !hasValidData -> "Loading..."
                                 isCharging -> "Charging"
-                                else -> "On Battery"
+                                else -> "Not Charging"
                             },
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = when {
@@ -93,18 +94,6 @@ fun BatteryCard(
                     }
                 }
             }
-
-            BatteryLiquidIndicator(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 21.dp, bottom = 21.dp)
-                    .width(38.dp)
-                    .height(70.dp),
-                level = batteryLevel,
-                isAnimating = isCharging,
-                colorStart = BatteryGradientStart,
-                colorEnd = BatteryGradientEnd
-            )
         }
     }
 }

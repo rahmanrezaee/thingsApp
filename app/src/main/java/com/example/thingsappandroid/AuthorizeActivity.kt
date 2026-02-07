@@ -105,7 +105,7 @@ class AuthorizeActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.BottomCenter
+                    contentAlignment = Alignment.Center
                 ) {
                     AuthorizeScreen(
                         requestedBy = requestedBy,
@@ -113,6 +113,7 @@ class AuthorizeActivity : ComponentActivity() {
                         sessionId = sessionId,
                         isInitializing = state.isInitializing,
                         isLoading = state.isLoading,
+                        climateStatusInt = state.climateStatus,
                         onAuthorize = {
                             if (!state.isLoading && !state.isInitializing) {
                                 Log.d("AuthorizeActivity", "Authorize clicked")

@@ -18,6 +18,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 
@@ -58,7 +59,8 @@ class SplashViewModel @Inject constructor(
             ) ?: UUID.randomUUID().toString()
 
             // Check network connectivity first
-            if (!NetworkUtils.isNetworkAvailable(getApplication())) {
+            val networkAvailable = NetworkUtils.isNetworkAvailable(getApplication())
+            if (!networkAvailable) {
                 Log.w("SplashViewModel", "No network connection available - will use last saved device info if any")
                 tryNavigateToHomeOrRequestLocation()
                 return@launch
@@ -77,29 +79,43 @@ class SplashViewModel @Inject constructor(
                 }
                 val hasStation = lastDeviceInfo?.stationInfo != null
                 preferenceManager.setHasStation(hasStation)
-                getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
+                val intent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+                    setPackage(getApplication<Application>().packageName)
+                }
+                getApplication<Application>().sendBroadcast(intent)
                 tryNavigateToHomeOrRequestLocation()
                 return@launch
             }
             
-            // 2. No token - initialize device (register, get token, sync info)
+            // 2. No token - initialize device (register, get token, sync info) with timeout so we don't block opening HomeScreen
             try {
                 Log.d("SplashViewModel", "Initializing device for deviceId: $deviceId")
-                val (success, token, deviceInfo) = repository.initializeDevice(getApplication(), deviceId, null)
-                
-                if (success && token != null) {
-                    Log.d("SplashViewModel", "✓ Device initialized successfully")
-                    tokenManager.saveToken(token)
-                    NetworkModule.setAuthToken(token)
-                    deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
-                    val hasStation = deviceInfo?.stationInfo != null
-                    preferenceManager.setHasStation(hasStation)
-                    getApplication<Application>().sendBroadcast(Intent(BatteryServiceActions.DEVICEINFO_UPDATED))
-                    tryNavigateToHomeOrRequestLocation()
+                val initResult = withTimeoutOrNull(15_000L) {
+                    repository.initializeDevice(getApplication(), deviceId, null)
+                }
+                if (initResult != null) {
+                    val (success, token, deviceInfo) = initResult
+                    if (success && token != null) {
+                        Log.d("SplashViewModel", "✓ Device initialized successfully")
+                        tokenManager.saveToken(token)
+                        NetworkModule.setAuthToken(token)
+                        deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
+                        val hasStation = deviceInfo?.stationInfo != null
+                        preferenceManager.setHasStation(hasStation)
+                        val intent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+                            setPackage(getApplication<Application>().packageName)
+                        }
+                        getApplication<Application>().sendBroadcast(intent)
+                        tryNavigateToHomeOrRequestLocation()
+                        return@launch
+                    } else {
+                        Log.e("SplashViewModel", "Device initialization failed")
+                        _effect.send(SplashEffect.ShowError("Failed to authenticate. Please check your internet connection and try again."))
+                        delay(2000)
+                        tryNavigateToHomeOrRequestLocation()
+                    }
                 } else {
-                    Log.e("SplashViewModel", "Device initialization failed")
-                    _effect.send(SplashEffect.ShowError("Failed to authenticate. Please check your internet connection and try again."))
-                    delay(2000)
+                    Log.w("SplashViewModel", "Device initialization timed out (15s), navigating to home with cached data")
                     tryNavigateToHomeOrRequestLocation()
                 }
             } catch (e: Exception) {

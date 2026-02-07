@@ -21,8 +21,8 @@ class BatteryNotificationHelper(
 
     fun getDCSInfo(currentDCS: DeviceClimateStatus): DCSInfo {
         val iconRes = try {
-            context.resources.getDrawable(R.drawable.ic_power, null)
-            R.drawable.ic_power
+            context.resources.getDrawable(R.drawable.ic_climate_status, null)
+            R.drawable.ic_climate_status
         } catch (e: Exception) {
             android.R.drawable.ic_dialog_info
         }

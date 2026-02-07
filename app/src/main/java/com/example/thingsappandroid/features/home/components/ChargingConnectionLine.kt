@@ -19,13 +19,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.ui.theme.BatteryYellow
 import com.example.thingsappandroid.ui.theme.Gray300
+import com.example.thingsappandroid.ui.theme.Gray900
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable
 fun ChargingConnectionLine(
     isCharging: Boolean,
-    height: Dp = 48.dp
+    height: Dp = 48.dp,
+    isGreenStation: Boolean = false
 ) {
+    // Orange dot for green station, black dot for not green
+    val dotColor = if (isGreenStation) BatteryYellow else Gray900
     val infiniteTransition = rememberInfiniteTransition(label = "Electricity")
 
     val progress by infiniteTransition.animateFloat(
@@ -66,7 +70,7 @@ fun ChargingConnectionLine(
                     .offset(y = height * progress - 12.dp) // -12dp to center the 24dp box on the progress point
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(BatteryYellow),
+                    .background(dotColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
