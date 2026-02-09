@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import com.google.gson.Gson
 import com.example.thingsappandroid.data.local.PreferenceManager
+import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.local.dao.ConsumptionDao
 import com.example.thingsappandroid.data.model.*
 import com.example.thingsappandroid.data.remote.NetworkModule
@@ -20,7 +21,8 @@ import kotlinx.coroutines.withContext
 
 class ThingsRepository(
     private val consumptionDao: ConsumptionDao,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    private val tokenManager: TokenManager
 ) {
     private val api = NetworkModule.api
     private val gson = Gson()
@@ -84,6 +86,16 @@ class ThingsRepository(
     ): Triple<Boolean, String?, DeviceInfoResponse?> {
         return withContext(Dispatchers.IO) {
             try {
+                // Check if token already exists - skip register+getToken if we have one
+                val existingToken = tokenManager.getToken()
+                if (!existingToken.isNullOrEmpty()) {
+                    Log.d("ThingsRepo", "initializeDevice: token already exists, skipping register+getToken")
+                    authToken = existingToken
+                    NetworkModule.setAuthToken(existingToken)
+                    val deviceInfo = syncDeviceInfo(context, deviceId, stationCode, skipRegister = true)
+                    return@withContext Triple(true, existingToken, deviceInfo)
+                }
+                
                 val serialNumber = getDeviceSerialNumber()
                 val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
                 val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
@@ -113,6 +125,7 @@ class ThingsRepository(
                 val token = tokenResponse.body()?.token ?: return@withContext Triple(false, null, null)
                 authToken = token
                 NetworkModule.setAuthToken(token)
+                tokenManager.saveToken(token)
                 
                 val deviceInfo = syncDeviceInfo(context, deviceId, stationCode, skipRegister = true)
                 Triple(true, token, deviceInfo)

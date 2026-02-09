@@ -182,19 +182,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                             // Android 11+: Must use Settings - show dialog
                             showBackgroundLocationDialog = true
                         }
-                    } else {
-                        // All permissions OK, proceed with app start
-                        splashViewModel.runAppStartCheckIfNeeded()
                     }
                     backgroundLocationChecked = true
                 }
             }
             
-            // When background location is granted, proceed with app start
-            // Background location is MANDATORY - only proceed when it's actually granted
-            LaunchedEffect(hasBackgroundLocation, backgroundLocationChecked) {
+            // Single trigger: when all permissions (including background location) are granted, run app start once
+            LaunchedEffect(hasPermissions, hasBackgroundLocation, backgroundLocationChecked) {
                 if (hasPermissions && backgroundLocationChecked && hasBackgroundLocation) {
-                    // All permissions granted (including mandatory background location), proceed
                     splashViewModel.runAppStartCheckIfNeeded()
                 }
             }

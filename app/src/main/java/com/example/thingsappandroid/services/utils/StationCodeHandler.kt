@@ -18,8 +18,8 @@ import kotlinx.coroutines.delay
  * 
  * Complete flow:
  * 1. Call SetStation with station code
- * 2. If successful, call SetClimateStatus
- * 3. If ClimateStatus not in [5,6,7,9], show notification
+ * 2. If charging: call SetClimateStatus; if not charging: never call SetClimateStatus
+ * 3. If charging and ClimateStatus not in [5,6,7,9], show notification
  * 4. Call GetDeviceInfo and store in local DB
  */
 class StationCodeHandler(private val context: Context) {
@@ -27,20 +27,23 @@ class StationCodeHandler(private val context: Context) {
     private val TAG = "StationCodeHandler"
     
     /**
-     * Handle station code submission from user
-     * 
+     * Handle station code submission from user.
+     * SetClimateStatus is only called when [isCharging] is true; never when not charging.
+     *
      * @param deviceId Device ID
      * @param stationCode Station code entered by user
+     * @param isCharging True when device is charging; if false, SetClimateStatus is never called
      * @param onNotificationNeeded Callback when notification should be shown
-     * @return Climate status if successful, null otherwise
+     * @return Climate status if successful and charging, null otherwise
      */
     suspend fun handleStationCodeSubmission(
         deviceId: String,
         stationCode: String,
+        isCharging: Boolean,
         onNotificationNeeded: suspend () -> Unit
     ): Int? {
         try {
-            Log.d(TAG, "🚀 Starting station code submission flow...")
+            Log.d(TAG, "🚀 Starting station code submission flow... (isCharging=$isCharging)")
             
             // Get WiFi and Location
             val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(
@@ -71,23 +74,27 @@ class StationCodeHandler(private val context: Context) {
             
             Log.d(TAG, "✅ SetStation successful")
             
-            // Step 2: Call SetClimateStatus
-            Log.d(TAG, "2️⃣ Calling SetClimateStatus")
-            val climateStatus = callSetClimateStatus(
-                deviceId, 
-                wifiResult.bssid, 
-                latitude, 
-                longitude, 
-                stationCode
-            )
-            
-            // Step 3: Check if we need to show notification
-            if (climateStatus != null && climateStatus !in listOf(5, 6, 7, 9)) {
-                Log.d(TAG, "3️⃣ ClimateStatus=$climateStatus requires station code notification")
-                delay(1000)
-                onNotificationNeeded()
+            var climateStatus: Int? = null
+            if (isCharging) {
+                // Step 2: Call SetClimateStatus only when charging; never when not charging
+                Log.d(TAG, "2️⃣ Calling SetClimateStatus (charging)")
+                climateStatus = callSetClimateStatus(
+                    deviceId, 
+                    wifiResult.bssid, 
+                    latitude, 
+                    longitude, 
+                    stationCode
+                )
+                // Step 3: Check if we need to show notification
+                if (climateStatus != null && climateStatus !in listOf(5, 6, 7, 9)) {
+                    Log.d(TAG, "3️⃣ ClimateStatus=$climateStatus requires station code notification")
+                    delay(1000)
+                    onNotificationNeeded()
+                } else {
+                    Log.d(TAG, "3️⃣ ClimateStatus=$climateStatus - No notification needed")
+                }
             } else {
-                Log.d(TAG, "3️⃣ ClimateStatus=$climateStatus - No notification needed")
+                Log.d(TAG, "2️⃣ Skipping SetClimateStatus (not charging)")
             }
             
             // Step 4: Call GetDeviceInfo and store in local DB

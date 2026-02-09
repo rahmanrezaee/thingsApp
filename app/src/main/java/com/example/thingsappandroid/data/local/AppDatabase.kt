@@ -4,17 +4,20 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.thingsappandroid.data.local.dao.BatteryReadingDao
 import com.example.thingsappandroid.data.local.dao.ConsumptionDao
+import com.example.thingsappandroid.data.local.entity.BatteryReadingEntity
 import com.example.thingsappandroid.data.local.entity.ConsumptionEntity
 
 @Database(
-    entities = [ConsumptionEntity::class],
-    version = 1,
+    entities = [ConsumptionEntity::class, BatteryReadingEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun consumptionDao(): ConsumptionDao
+    abstract fun batteryReadingDao(): BatteryReadingDao
 
     companion object {
         @Volatile
@@ -31,7 +34,8 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "things_app_database"
-            ).build()
+            ).fallbackToDestructiveMigration()
+                .build()
         }
     }
 }

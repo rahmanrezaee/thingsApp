@@ -38,8 +38,13 @@ class ClimateStatusManager(private val context: Context) {
                 Log.w(TAG, "handleChargingStarted skipped: no deviceId")
                 return null
             }
+            // On first launch Splash/register may not have run yet when BatteryService calls us,
+            // so token can be null; SetClimateStatus is skipped and getDeviceInfo's climateStatus is used.
             if (NetworkModule.getAuthToken().isNullOrBlank()) {
                 Log.d(TAG, "handleChargingStarted skipped: no auth token")
+                // #region agent log
+                Log.d(TAG, "SetClimateStatusDebug {\"hypothesisId\":\"H2\",\"message\":\"handleChargingStarted skipped: no auth token\",\"hasToken\":false}")
+                // #endregion
                 return null
             }
 
@@ -62,6 +67,9 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
+            // #region agent log
+            Log.d(TAG, "SetClimateStatusDebug {\"hypothesisId\":\"H2\",\"message\":\"handleChargingStarted proceeding to SetClimateStatus API\",\"hasToken\":true}")
+            // #endregion
             setClimateStatusOnChargingStart(deviceId, wifiResult.bssid)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling charging event: ${e.message}", e)

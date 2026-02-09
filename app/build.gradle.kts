@@ -18,7 +18,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.example.thingsappandroid.HiltTestRunner"
     }
 
     buildTypes {
@@ -65,6 +65,10 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.runtime)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.test.core)
 
     implementation(libs.androidx.compose.material.icons.extended)
     
@@ -81,6 +85,9 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation("androidx.test:rules:1.5.0")
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.57.1")
+    kaptAndroidTest("com.google.dagger:hilt-android-compiler:2.57.1")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)

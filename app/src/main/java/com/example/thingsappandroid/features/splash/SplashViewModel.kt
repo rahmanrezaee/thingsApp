@@ -14,6 +14,8 @@ import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -38,19 +40,24 @@ class SplashViewModel @Inject constructor(
     private val _effect = Channel<SplashEffect>()
     val effect = _effect.receiveAsFlow()
 
-    private var appStartCheckStarted = false
+    private var appStartCheckJob: Job? = null
 
-    /** Call when permissions are granted to run auth/location check. Only runs once. */
+    /** Call when permissions are granted to run auth/location check. If a run is already in progress, it is cancelled and a new one is started. */
     fun runAppStartCheckIfNeeded() {
-        if (appStartCheckStarted) return
-        appStartCheckStarted = true
-        checkAppStart()
+        appStartCheckJob?.cancel()
+        val newJob = viewModelScope.launch {
+            try {
+                checkAppStart()
+            } finally {
+                if (appStartCheckJob == coroutineContext[Job]) appStartCheckJob = null
+            }
+        }
+        appStartCheckJob = newJob
     }
 
     @SuppressLint("HardwareIds")
-    private fun checkAppStart() {
-        viewModelScope.launch {
-            delay(1000)
+    private suspend fun checkAppStart() {
+        delay(1000)
 
             // Get Device ID (onboarding already completed before reaching splash)
             val deviceId = Settings.Secure.getString(
@@ -63,7 +70,7 @@ class SplashViewModel @Inject constructor(
             if (!networkAvailable) {
                 Log.w("SplashViewModel", "No network connection available - will use last saved device info if any")
                 tryNavigateToHomeOrRequestLocation()
-                return@launch
+                return
             }
 
             // Always register device and get token (no login required)
@@ -84,9 +91,9 @@ class SplashViewModel @Inject constructor(
                 }
                 getApplication<Application>().sendBroadcast(intent)
                 tryNavigateToHomeOrRequestLocation()
-                return@launch
+                return
             }
-            
+
             // 2. No token - initialize device (register, get token, sync info) with timeout so we don't block opening HomeScreen
             try {
                 Log.d("SplashViewModel", "Initializing device for deviceId: $deviceId")
@@ -97,17 +104,25 @@ class SplashViewModel @Inject constructor(
                     val (success, token, deviceInfo) = initResult
                     if (success && token != null) {
                         Log.d("SplashViewModel", "✓ Device initialized successfully")
+                        // Check if token was null before (first time) - only then send FOR_NEW_DEVICE_CALL_CLIMATE_STATUS
+                        val wasTokenNull = tokenManager.getToken().isNullOrEmpty() 
                         tokenManager.saveToken(token)
                         NetworkModule.setAuthToken(token)
                         deviceInfo?.let { preferenceManager.saveLastDeviceInfo(it) }
                         val hasStation = deviceInfo?.stationInfo != null
                         preferenceManager.setHasStation(hasStation)
-                        val intent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
-                            setPackage(getApplication<Application>().packageName)
+                        val pkg = getApplication<Application>().packageName
+                        getApplication<Application>().sendBroadcast(
+                            Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply { setPackage(pkg) }
+                        )
+                        // Only send if token was null before (first time getting token)
+                        if (wasTokenNull) {
+                            getApplication<Application>().sendBroadcast(
+                                Intent(BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS).apply { setPackage(pkg) }
+                            )
                         }
-                        getApplication<Application>().sendBroadcast(intent)
                         tryNavigateToHomeOrRequestLocation()
-                        return@launch
+                        return
                     } else {
                         Log.e("SplashViewModel", "Device initialization failed")
                         _effect.send(SplashEffect.ShowError("Failed to authenticate. Please check your internet connection and try again."))
@@ -119,6 +134,7 @@ class SplashViewModel @Inject constructor(
                     tryNavigateToHomeOrRequestLocation()
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("SplashViewModel", "Error during initialization: ${e.message}", e)
                 val errorMessage = when {
                     e.message?.contains("UnknownHostException") == true || 
@@ -133,7 +149,6 @@ class SplashViewModel @Inject constructor(
                 delay(2000)
                 tryNavigateToHomeOrRequestLocation()
             }
-        }
     }
 
     /** Navigate to home; we only require permission (grant/background), not "location services" enabled. */
