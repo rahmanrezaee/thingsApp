@@ -152,6 +152,7 @@ class ExampleInstrumentedTest {
     fun createIntentFilter_registersSuccessfully() {
         val receiver = BatteryServiceBroadcastHandler.createReceiver(
             onDeviceInfoUpdated = {},
+            onForNewDeviceCallClimateStatus = {},
             onRequestGetDeviceInfo = {},
             onBatteryIntent = {},
             onConnectivityAction = {}

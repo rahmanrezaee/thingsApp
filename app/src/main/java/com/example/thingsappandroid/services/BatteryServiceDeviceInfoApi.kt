@@ -41,18 +41,18 @@ class BatteryServiceDeviceInfoApi(
      * Fetch device info when WiFi+location are ready. Register/getToken are done in SplashViewModel.
      * If no token (e.g. app started without splash), apply default offline info.
      */
-    suspend fun runGetDeviceInfoOnce() {
+    suspend fun getDeviceInfoOnlineOrNoInternet() {
         val token = tokenManager.getToken()
         if (token.isNullOrEmpty()) {
             Log.d(tag, "runGetDeviceInfoOnce: no token (Splash handles register/getToken) - applying default")
             applyDefaultDeviceInfo()
         } else {
             NetworkModule.setAuthToken(token)
-            fetchDeviceInfo(null)
+            fetchDeviceInfo()
         }
     }
 
-    suspend fun fetchDeviceInfo(stationCodeOverride: String?) {
+    suspend fun fetchDeviceInfo() {
         val wifiAddress = withContext(Dispatchers.IO) { WifiUtils.getHashedWiFiBSSID(context) }
         if (wifiAddress.isNullOrBlank()) {
             Log.d(tag, "fetchDeviceInfo: WiFi address missing - not sending request")
@@ -60,17 +60,17 @@ class BatteryServiceDeviceInfoApi(
             onUpdated()
             return
         }
-        val stationCode = stationCodeOverride ?: preferenceManager.getStationCode()
         val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
         val request = DeviceInfoRequest(
             deviceId = deviceId,
-            stationCode = stationCode,
             wifiAddress = wifiAddress,
             currentVersion = "1.0.0",
             latitude = latitude,
             longitude = longitude
         )
         try {
+
+            Log.d("getDeviceInfo","fetchDeviceInfo")
             val response = withTimeoutOrNull(12_000L) {
                 withContext(Dispatchers.IO) { NetworkModule.api.getDeviceInfo(request) }
             }

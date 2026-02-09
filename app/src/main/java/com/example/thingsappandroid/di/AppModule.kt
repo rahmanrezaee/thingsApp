@@ -44,10 +44,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideThingsRepository(
-        consumptionDao: ConsumptionDao,
         preferenceManager: PreferenceManager,
         tokenManager: TokenManager
     ): ThingsRepository {
-        return ThingsRepository(consumptionDao, preferenceManager, tokenManager)
+        return ThingsRepository( preferenceManager, tokenManager)
     }
 }

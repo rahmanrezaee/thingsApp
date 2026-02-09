@@ -80,68 +80,12 @@ class AuthViewModel @Inject constructor(
 
     @SuppressLint("HardwareIds")
     private fun performGuestLogin() {
-        viewModelScope.launch {
-            val loginBreadcrumb = Breadcrumb("User attempting guest login")
-            loginBreadcrumb.category = "user"
-            loginBreadcrumb.level = io.sentry.SentryLevel.INFO
-            Sentry.addBreadcrumb(loginBreadcrumb)
-            _state.value = _state.value.copy(isGuestLoading = true, error = null)
+        _state.value = _state.value.copy(isGoogleLoading = true, error = null)
 
-            try {
-                // Generate or retrieve Device ID
-                val deviceId = Settings.Secure.getString(getApplication<Application>().contentResolver, Settings.Secure.ANDROID_ID)
-                    ?: UUID.randomUUID().toString()
+        // TODO: Implement Google OAuth login
+        showInfoMessage("performGuestLogin coming soon!")
 
-                // Step 1: Register the device first (all fields filled)
-                val deviceInfo = repository.syncDeviceInfo(context = getApplication(), deviceId = deviceId, stationCode = null)
-
-                if (deviceInfo != null) {
-                    // Step 2: Get authentication token
-                    val token = repository.authenticate(deviceId)
-
-                    if (token != null) {
-                        // Save token in "secure format" (Private Mode SharedPreferences)
-                        tokenManager.saveToken(token)
-                        
-                        val successBreadcrumb = Breadcrumb("Guest login successful")
-                        successBreadcrumb.category = "auth"
-                        successBreadcrumb.level = io.sentry.SentryLevel.INFO
-                        Sentry.addBreadcrumb(successBreadcrumb)
-                        
-                        val user = User()
-                        user.id = deviceId
-                        Sentry.setUser(user)
-
-                        showSuccessMessage("Successfully connected to Things App!")
-                        _effect.send(AuthEffect.NavigateToHome)
-                    } else {
-                        showErrorMessage("Failed to get authentication token. Please check your connection.")
-                        // Logout logic: Clear any potential partial state
-                        tokenManager.clearToken()
-                    }
-                } else {
-                    showErrorMessage("Failed to register device. Please check your connection.")
-                    // Logout logic: Clear any potential partial state
-                    tokenManager.clearToken()
-                }
-            } catch (e: Exception) {
-                val deviceId = try {
-                    Settings.Secure.getString(getApplication<Application>().contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
-                } catch (ex: Exception) {
-                    "unknown"
-                }
-                Sentry.withScope { scope ->
-                    scope.setTag("operation", "performGuestLogin")
-                    scope.setContexts("auth", mapOf("device_id" to deviceId))
-                    Sentry.captureException(e)
-                }
-                showErrorMessage("Connection failed. Please check your internet connection.")
-                // Logout logic: Clear any potential partial state
-                tokenManager.clearToken()
-            }
-
-            _state.value = _state.value.copy(isGuestLoading = false)
-        }
+        _state.value = _state.value.copy(isGoogleLoading = false)
     }
 
     private fun performGoogleLogin() {

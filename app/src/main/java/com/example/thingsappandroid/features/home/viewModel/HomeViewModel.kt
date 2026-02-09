@@ -635,6 +635,8 @@ class HomeViewModel @Inject constructor(
                     // SetClimateStatus only when charging; never when not charging
                     if (_state.value.isCharging) {
                         withContext(Dispatchers.IO) {
+
+                            Log.d("getDeviceInfo", "ClimateStatusManager submitStationCode")
                             ClimateStatusManager(getApplication()).handleChargingStarted()
                         }
                     }

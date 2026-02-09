@@ -221,11 +221,10 @@ class BatteryServiceNotificationHandler(
         return true
     }
 
-    fun maybeShowStationCodeNotificationOnce(thenMarkShown: () -> Unit) {
+    fun maybeShowStationCodeNotificationOnce(){
         scope.launch {
             delay(3000)
             showStationCodeNotification()
-            thenMarkShown()
         }
     }
 

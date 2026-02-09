@@ -4,31 +4,21 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.google.gson.Gson
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
-import com.example.thingsappandroid.data.local.dao.ConsumptionDao
 import com.example.thingsappandroid.data.model.*
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import io.sentry.Breadcrumb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ThingsRepository(
-    private val consumptionDao: ConsumptionDao,
     private val preferenceManager: PreferenceManager,
     private val tokenManager: TokenManager
 ) {
     private val api = NetworkModule.api
-    private val gson = Gson()
-    private val deviceInfoMutex = Mutex()
-    private val isSyncingDeviceInfo = java.util.concurrent.atomic.AtomicBoolean(false)
-
     private var authToken: String? = null
 
     fun getLastDeviceInfo(): DeviceInfoResponse? = preferenceManager.getLastDeviceInfo()
@@ -36,7 +26,7 @@ class ThingsRepository(
     fun saveLastDeviceInfo(deviceInfo: DeviceInfoResponse) {
         preferenceManager.saveLastDeviceInfo(deviceInfo)
     }
-    
+
     fun createDefaultDeviceInfo(deviceId: String): DeviceInfoResponse {
         Log.d("ThingsRepo", "Creating default device info for offline mode")
         return DeviceInfoResponse(
@@ -79,27 +69,14 @@ class ThingsRepository(
         }
     }
 
-    suspend fun initializeDevice(
-        context: Context,
-        deviceId: String,
-        stationCode: String? = null
-    ): Triple<Boolean, String?, DeviceInfoResponse?> {
+    /** Register device and get token only - no device info sync. Used by splash screen. */
+    suspend fun registerAndGetToken(context: Context, deviceId: String): Pair<Boolean, String?> {
         return withContext(Dispatchers.IO) {
             try {
-                // Check if token already exists - skip register+getToken if we have one
-                val existingToken = tokenManager.getToken()
-                if (!existingToken.isNullOrEmpty()) {
-                    Log.d("ThingsRepo", "initializeDevice: token already exists, skipping register+getToken")
-                    authToken = existingToken
-                    NetworkModule.setAuthToken(existingToken)
-                    val deviceInfo = syncDeviceInfo(context, deviceId, stationCode, skipRegister = true)
-                    return@withContext Triple(true, existingToken, deviceInfo)
-                }
-                
                 val serialNumber = getDeviceSerialNumber()
                 val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
                 val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
-                
+
                 val registerResponse = api.registerDevice(
                     RegisterDeviceRequest(
                         deviceId = deviceId,
@@ -114,27 +91,26 @@ class ThingsRepository(
                         longitude = longitude
                     )
                 )
-                
+
                 if (!registerResponse.isSuccessful && registerResponse.code() != 400 && registerResponse.code() != 409) {
-                    return@withContext Triple(false, null, null)
+                    return@withContext Pair(false, null)
                 }
-                
+
                 val tokenResponse = api.getToken(mapOf("DeviceId" to deviceId))
-                if (!tokenResponse.isSuccessful) return@withContext Triple(false, null, null)
-                
-                val token = tokenResponse.body()?.token ?: return@withContext Triple(false, null, null)
+                if (!tokenResponse.isSuccessful) return@withContext Pair(false, null)
+
+                val token = tokenResponse.body()?.token ?: return@withContext Pair(false, null)
                 authToken = token
                 NetworkModule.setAuthToken(token)
                 tokenManager.saveToken(token)
-                
-                val deviceInfo = syncDeviceInfo(context, deviceId, stationCode, skipRegister = true)
-                Triple(true, token, deviceInfo)
+                Pair(true, token)
             } catch (e: Exception) {
                 Sentry.captureException(e)
-                Triple(false, null, null)
+                Pair(false, null)
             }
         }
     }
+
 
     suspend fun authenticate(deviceId: String): String? {
         return withContext(Dispatchers.IO) {
@@ -152,41 +128,24 @@ class ThingsRepository(
         }
     }
 
-    suspend fun syncDeviceInfo(context: Context, deviceId: String, stationCode: String?, skipRegister: Boolean = false): DeviceInfoResponse? {
-        if (!isSyncingDeviceInfo.compareAndSet(false, true)) return getLastDeviceInfo()
-        
+    suspend fun getDeviceInfo(context: Context, deviceId: String): DeviceInfoResponse? {
         return try {
-            deviceInfoMutex.withLock {
-                withContext(Dispatchers.IO) {
-                    if (!skipRegister) {
-                        api.registerDevice(
-                            RegisterDeviceRequest(
-                                deviceId = deviceId,
-                                name = Build.MODEL ?: "Android Device",
-                                make = Build.MANUFACTURER,
-                                os = "Android ${Build.VERSION.RELEASE}",
-                                category = "Mobile",
-                                serialNumber = getDeviceSerialNumber()
-                            )
-                        )
-                    }
-
-                    val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
-                    if (wifiAddress.isNullOrBlank()) {
-                        Log.d("ThingsRepo", "WiFi address missing - not sending getDeviceInfo request")
-                        return@withContext getLastDeviceInfo()
-                    }
-                    val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
-                    val request = DeviceInfoRequest(deviceId, stationCode, wifiAddress, null, latitude, longitude)
-                    val infoResponse = api.getDeviceInfo(request)
-
-                    if (infoResponse.isSuccessful) {
-                        infoResponse.body()?.data?.also { saveLastDeviceInfo(it) } ?: getLastDeviceInfo()
-                    } else getLastDeviceInfo()
+            withContext(Dispatchers.IO) {
+                val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
+                if (wifiAddress.isNullOrBlank()) {
+                    Log.d("ThingsRepo", "WiFi address missing - not sending getDeviceInfo request")
+                    return@withContext getLastDeviceInfo()
                 }
+                val request = DeviceInfoRequest(deviceId, wifiAddress= wifiAddress)
+                val infoResponse = api.getDeviceInfo(request)
+
+                if (infoResponse.isSuccessful) {
+                    infoResponse.body()?.data ?: getLastDeviceInfo()
+                } else getLastDeviceInfo()
             }
-        } finally {
-            isSyncingDeviceInfo.set(false)
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            getLastDeviceInfo()
         }
     }
 

@@ -19,7 +19,7 @@ object BatteryServiceBroadcastHandler {
     fun createReceiver(
         onDeviceInfoUpdated: () -> Unit,
         onForNewDeviceCallClimateStatus: () -> Unit,
-        onRequestGetDeviceInfo: (stationCode: String?) -> Unit,
+        onRequestGetDeviceInfo: () -> Unit,
         onBatteryIntent: (Intent) -> Unit,
         onConnectivityAction: (Intent?) -> Unit
     ): BroadcastReceiver = object : BroadcastReceiver() {
@@ -29,7 +29,7 @@ object BatteryServiceBroadcastHandler {
             when (action) {
                 BatteryServiceActions.DEVICEINFO_UPDATED -> onDeviceInfoUpdated()
                 BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS -> onForNewDeviceCallClimateStatus()
-                BatteryServiceActions.REQUEST_GET_DEVICE_INFO -> onRequestGetDeviceInfo(receivedIntent?.getStringExtra(BatteryServiceActions.EXTRA_STATION_CODE))
+                BatteryServiceActions.REQUEST_GET_DEVICE_INFO -> onRequestGetDeviceInfo()
                 Intent.ACTION_BATTERY_CHANGED, Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> receivedIntent?.let { onBatteryIntent(it) }
                 WifiManager.NETWORK_STATE_CHANGED_ACTION, WifiManager.WIFI_STATE_CHANGED_ACTION, ConnectivityManager.CONNECTIVITY_ACTION,
                 android.location.LocationManager.PROVIDERS_CHANGED_ACTION, android.location.LocationManager.MODE_CHANGED_ACTION -> onConnectivityAction(receivedIntent)
@@ -51,9 +51,15 @@ object BatteryServiceBroadcastHandler {
         addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
     }
 
+    /**
+     * Uses RECEIVER_EXPORTED so that same-app broadcasts with custom actions
+     * (e.g. FOR_NEW_DEVICE_CALL_CLIMATE_STATUS, DEVICEINFO_UPDATED) are delivered.
+     * On Android 14+, RECEIVER_NOT_EXPORTED blocks same-app custom-action broadcasts.
+     * Sender always uses setPackage(context.packageName), so only our app sends these.
+     */
     fun registerReceiver(context: Context, receiver: BroadcastReceiver, filter: IntentFilter) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
         } else {
             context.registerReceiver(receiver, filter)
         }

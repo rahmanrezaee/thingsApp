@@ -82,10 +82,9 @@ class AuthorizeViewModel @Inject constructor(
 
                     // Fetch fresh data from backend
                     android.util.Log.d("AuthorizeViewModel", "Fetching device info from backend...")
-                    val updatedInfo = repository.syncDeviceInfo(
+                    val updatedInfo = repository.getDeviceInfo(
                         context = getApplication(), 
-                        deviceId = deviceId, 
-                        stationCode = null
+                        deviceId = deviceId,
                     )
                     
                     android.util.Log.d("AuthorizeViewModel", "Backend response - climate status: ${updatedInfo?.climateStatus}")

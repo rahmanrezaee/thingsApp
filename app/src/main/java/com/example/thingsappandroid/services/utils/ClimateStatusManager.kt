@@ -54,7 +54,6 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
-            val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val hasLocationPermission = LocationUtils.hasLocationPermission(context)
             val isLocationEnabled = LocationUtils.isLocationEnabled(context)
             if (!hasLocationPermission || !isLocationEnabled) {
@@ -146,6 +145,8 @@ class ClimateStatusManager(private val context: Context) {
         deviceId: String,
         wiFiAddress: String
     ) {
+
+
         try {
             val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val request = DeviceInfoRequest(
@@ -165,29 +166,9 @@ class ClimateStatusManager(private val context: Context) {
                     
                     // Save to PreferenceManager (local + backend)
                     val prefManager = PreferenceManager(context)
-                    // #region agent log
-                    val _logPayload = org.json.JSONObject().apply {
-                        put("sessionId", "debug-session")
-                        put("location", "ClimateStatusManager.getDeviceInfoOnChargingStart:beforeSaveDeviceInfo")
-                        put("message", "saving device info to prefs")
-                        put("data", org.json.JSONObject().apply { put("climateStatus", deviceInfo.climateStatus) })
-                        put("timestamp", System.currentTimeMillis())
-                        put("hypothesisId", "H4")
-                    }.toString()
-                    Log.d("ClimateNotifDebug", _logPayload)
-                    // #endregion
+
                     prefManager.saveDeviceInfo(deviceInfo)
                     // #region agent log
-                    Log.d("ClimateNotifDebug", org.json.JSONObject().apply {
-                        put("sessionId", "debug-session")
-                        put("location", "ClimateStatusManager.getDeviceInfoOnChargingStart:afterSaveDeviceInfo")
-                        put("message", "saveDeviceInfo called (apply async)")
-                        put("data", org.json.JSONObject().apply { put("climateStatus", deviceInfo.climateStatus) })
-                        put("timestamp", System.currentTimeMillis())
-                        put("hypothesisId", "H4")
-                    }.toString())
-                    // #endregion
-                    
                     val hasStation = deviceInfo.stationInfo != null
                     prefManager.setHasStation(hasStation)
                     if (deviceInfo.stationInfo != null) {
