@@ -3,6 +3,7 @@ package com.example.thingsappandroid.services
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
@@ -27,11 +28,15 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.sentry.Sentry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.coroutines.coroutineContext
+
 
 /**
  * Foreground service that shows device climate status in the notification bar.
@@ -75,17 +80,35 @@ class BatteryService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val ids = BatteryServiceNotificationIds
 
-    private var chargeState: BatteryState? = null
-    private var groupId: String? = null
     private var receiverRegistered = false
     private var currentDCS: DeviceClimateStatus = DeviceClimateStatus.UNKNOWN
-
+    private var stationCodeShownThisSession = false
 
     /** Created in onCreate from factories (need runtime deviceId). */
     private lateinit var consumptionTracker: ConsumptionTracker
     private lateinit var deviceInfoApi: BatteryServiceDeviceInfoApi
     private lateinit var notificationHandler: BatteryServiceNotificationHandler
     private lateinit var internalBroadcastReceiver: BroadcastReceiver
+
+
+    private var chargeState: BatteryState? = null
+    private var groupId: String? = null
+
+    /** Debounce delay for WiFi/location intent handling to avoid duplicate requests. */
+    private val wifiLocationDebounceMs = 400L
+    private val wifiHandlerLock = Any()
+    private var wifiHandlerJob: Job? = null
+
+    // -------------------------------------------------------------------------
+    // Charging helper — Service IS a Context, so call getSystemService directly
+    // -------------------------------------------------------------------------
+
+    private fun isCharging(): Boolean {
+        // Trust our parsed state first (avoids BatteryManager delay),
+        // fall back to system query if no state yet
+        return chargeState?.isCharging
+            ?: (getSystemService(BATTERY_SERVICE) as BatteryManager).isCharging
+    }
 
     // -------------------------------------------------------------------------
     // Broadcast handling: battery + WiFi/location → update state and notification
@@ -95,58 +118,136 @@ class BatteryService : Service() {
         consumptionTracker.stopTracking(level, voltage)
     }
 
-    private fun handleConnectivityIntent(intent: Intent?) {
-        // 1) If this is a battery intent, parse it and update charge state (and maybe start/stop consumption).
-        if (BatteryServiceBroadcastHandler.isBatteryIntent(intent?.action)) {
-            val result = BatteryServiceBatteryHandler.parseBatteryIntent(intent!!, chargeState)
-            val chargeStateChanged = result != null &&
-                    (chargeState == null || chargeState?.isCharging != result.state.isCharging)
+    private suspend fun handleBatteryIntent(intent: Intent) {
+        val action = intent.action
+        Log.d("BatteryService", "handleBatteryIntent: action=$action")
 
-            if (chargeStateChanged) {
-                if (!result.state.isCharging && result.wasCharging) {
-                    notificationHandler.cancelStationCodeNotification()
-                    notificationHandler.cancelLocationNotification()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val level = result.level
-                        val voltage = result.voltage
-                        serviceScope.launch {
-                            runStopTracking(level, voltage)
-                        }
-                    }
-                }
-                groupId =
-                    if (result.state.isCharging) java.util.UUID.randomUUID().toString() else null
-                chargeState = result.state
-                if (result.state.isCharging && !result.isInitialization) {
-                    consumptionTracker.startTracking(
-                        groupId!!,
-                        result.state.level,
-                        result.state.voltage
-                    )
-                    BatteryServiceConsumptionHandler.startPeriodicConsumptionReports(
-                        serviceScope, { chargeState }, consumptionTracker
-                    )
-                }
-                notificationHandler.updateNotification()
-            }
+        val isBatteryIntent = action == Intent.ACTION_BATTERY_CHANGED ||
+                action == Intent.ACTION_POWER_CONNECTED ||
+                action == Intent.ACTION_POWER_DISCONNECTED
+        if (!isBatteryIntent) {
+            Log.d("BatteryService", "handleBatteryIntent: not a battery intent, ignoring")
+            return
         }
 
+        val result = BatteryServiceBatteryHandler.parseBatteryIntent(intent, chargeState)
+        if (result == null) {
+            Log.w("BatteryService", "handleBatteryIntent: parseBatteryIntent returned null")
+            return
+        }
 
-        serviceScope.launch {
+        Log.d("BatteryService", "handleBatteryIntent: parsed → isCharging=${result.state.isCharging}, level=${result.level}, voltage=${result.voltage}, wasCharging=${result.wasCharging}, isInit=${result.isInitialization}")
+        Log.d("BatteryService", "handleBatteryIntent: current chargeState isCharging=${chargeState?.isCharging}, new isCharging=${result.state.isCharging}")
+
+        if (chargeState != null && chargeState?.isCharging == result.state.isCharging) {
+            Log.d("BatteryService", "handleBatteryIntent: charging state unchanged, skipping")
+            return
+        }
+
+        chargeState = result.state
+
+        if (!result.state.isCharging) {
+            Log.d("BatteryService", "handleBatteryIntent: charger DISCONNECTED")
+            notificationHandler.cancelStationCodeNotification()
+            notificationHandler.cancelLocationNotification()
+            stationCodeShownThisSession = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Log.d("BatteryService", "handleBatteryIntent: stopping consumption tracking level=${result.level} voltage=${result.voltage}")
+                runStopTracking(result.level, result.voltage)
+            }
+            groupId = null
+            notificationHandler.updateNotification()
+            return
+        }
+
+        Log.d("BatteryService", "handleBatteryIntent: charger CONNECTED")
+        groupId = java.util.UUID.randomUUID().toString()
+        Log.d("BatteryService", "handleBatteryIntent: new groupId=$groupId")
+
+        if (!result.isInitialization) {
+            Log.d("BatteryService", "handleBatteryIntent: starting consumption tracking")
+            consumptionTracker.startTracking(groupId!!, result.state.level, result.state.voltage)
+            BatteryServiceConsumptionHandler.startPeriodicConsumptionReports(serviceScope, { chargeState }, consumptionTracker)
+        } else {
+            Log.d("BatteryService", "handleBatteryIntent: skipping consumption tracking (initialization)")
+        }
+
+        Log.d("BatteryService", "handleBatteryIntent: calling runSetClimateStatusIfReady")
+        runSetClimateStatusIfReady()
+    }
+
+    private suspend fun runSetClimateStatusIfReady() {
+        val wifiReady = BatteryServiceBroadcastHandler.isWiFiConnected(applicationContext)
+        val locationReady = LocationUtils.hasLocationPermission(applicationContext) &&
+                LocationUtils.isLocationEnabled(applicationContext)
+        val charging = isCharging()
+        val apiLevel = Build.VERSION.SDK_INT
+
+        Log.d("BatteryService", "runSetClimateStatusIfReady: wifiReady=$wifiReady, locationReady=$locationReady, isCharging=$charging, apiLevel=$apiLevel")
+
+        notificationHandler.cancelStationCodeNotification()
+        stationCodeShownThisSession = false
+
+        if (wifiReady && locationReady && charging && apiLevel >= Build.VERSION_CODES.R) {
+            try {
+                Log.d("BatteryService", "runSetClimateStatusIfReady: calling climateStatusManager.handleChargingStarted")
+                val climateStatus = climateStatusManager.handleChargingStarted(
+                    job = currentCoroutineContext()[Job]!!
+                ) { reason, details, isPermissionDenied, isServicesDisabled ->
+                    Log.w("BatteryService", "runSetClimateStatusIfReady: location error reason=$reason, details=$details, permDenied=$isPermissionDenied, servicesDisabled=$isServicesDisabled")
+                    if (isCharging()) notificationHandler.showLocationErrorNotification(reason, details, isPermissionDenied, isServicesDisabled)
+                }
+                Log.d("BatteryService", "runSetClimateStatusIfReady: climateStatus result=$climateStatus")
+            } catch (e: Exception) {
+                Log.e("BatteryService", "runSetClimateStatusIfReady: error ${e.message}", e)
+                Sentry.captureException(e)
+            }
+        } else {
+            Log.d("BatteryService", "runSetClimateStatusIfReady: conditions not met, skipping SetClimateStatus")
+        }
+
+        notificationHandler.updateNotification()
+    }
+
+    private fun handleWifiAndLocationIntent(intent: Intent?) {
+        synchronized(wifiHandlerLock) {
+            wifiHandlerJob?.cancel()
+            wifiHandlerJob = serviceScope.launch {
+            delay(wifiLocationDebounceMs)
+            val isPowerConnected = isCharging()
+            val currentBssid = WifiUtils.getHashedWiFiBSSID(applicationContext)
+            val lastBssid = preferenceManager.getLastWifiBssid()
+            val bssidChanged = currentBssid != null && currentBssid != lastBssid
+
             val wifiReady = BatteryServiceBroadcastHandler.isWiFiConnected(applicationContext)
             val locationReady = LocationUtils.hasLocationPermission(applicationContext) &&
                     LocationUtils.isLocationEnabled(applicationContext)
-            val isPowerConnected =
-                BatteryServiceBroadcastHandler.getChargingStatusFromIntent(intent)
-                    ?: (chargeState?.isCharging == true)
-            val currentBssid = WifiUtils.getHashedWiFiBSSID(applicationContext)
-            val bssidChanged =
-                currentBssid != null && currentBssid != preferenceManager.getLastWifiBssid()
+
+            Log.d("BatteryService", "handleWifiAndLocationIntent: wifiReady=$wifiReady, locationReady=$locationReady, isPowerConnected=$isPowerConnected, currentBssid=$currentBssid, lastBssid=$lastBssid, bssidChanged=$bssidChanged")
 
             when {
-                wifiReady && locationReady -> onWifiAndLocationReady(bssidChanged, isPowerConnected)
-                wifiReady -> {
+                wifiReady && locationReady -> {
+                    Log.d("BatteryService", "handleWifiAndLocationIntent: WiFi+Location ready")
 
+                    notificationHandler.cancelLocationNotification()
+
+                    if (bssidChanged) {
+                        Log.d("BatteryService", "handleWifiAndLocationIntent: BSSID changed → clearing station code, saving new BSSID")
+                        notificationHandler.cancelStationCodeNotification()
+                        stationCodeShownThisSession = false
+                        preferenceManager.saveLastWifiBssid(currentBssid)
+                    }
+
+                    if (bssidChanged) {
+                        Log.d("getDeviceInfo","call bssidChanged")
+                        deviceInfoApi.fetchDeviceInfo()
+                    }
+
+                    notificationHandler.updateNotification()
+                }
+
+                wifiReady -> {
+                    Log.d("BatteryService", "handleWifiAndLocationIntent: WiFi ready but NO location")
                     if (preferenceManager.getAppInForeground()) {
                         notificationHandler.cancelLocationNotification()
                     } else {
@@ -155,50 +256,28 @@ class BatteryService : Service() {
                 }
 
                 else -> {
+                    Log.d("BatteryService", "handleWifiAndLocationIntent: NO WiFi")
                     notificationHandler.cancelLocationNotification()
+                    if (isPowerConnected) {
+                        Log.d("BatteryService", "handleWifiAndLocationIntent: charging offline → applying offline device info")
+                        deviceInfoApi.applyOfflineChargingDeviceInfo()
+                    }
                 }
             }
 
             val shouldShowStationCode = wifiReady && locationReady &&
-                    (isPowerConnected || (chargeState?.isCharging == true)) &&
-                    notificationHandler.shouldShowStationCodeNotification(chargeState?.isCharging == true)
+                    isPowerConnected &&
+                    notificationHandler.shouldShowStationCodeNotification(isCharging())
+            Log.d("BatteryService", "handleWifiAndLocationIntent: shouldShowStationCode=$shouldShowStationCode")
             if (shouldShowStationCode) {
                 notificationHandler.maybeShowStationCodeNotificationOnce()
             }
 
             BatteryServiceConsumptionHandler.syncPendingConsumptions(consumptionTracker)
-
-        }
-
-    }
-
-    private suspend fun onWifiAndLocationReady(
-        bssidChanged: Boolean,
-        isPowerConnected: Boolean,
-    ) {
-
-        notificationHandler.cancelLocationNotification()
-        if (bssidChanged) {
-            notificationHandler.cancelStationCodeNotification()
-        }
-        val shouldRunSetClimateStatus = isPowerConnected &&
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        if (shouldRunSetClimateStatus) {
-            try {
-                Log.d("getDeviceInfo", "ClimateStatusManager onWifiAndLocationReady")
-                climateStatusManager.handleChargingStarted { reason, details, isPermissionDenied, isServicesDisabled ->
-                    if (chargeState?.isCharging == true) {
-                        notificationHandler.showLocationErrorNotification(
-                            reason, details, isPermissionDenied, isServicesDisabled
-                        )
-                    }
-                }
-                notificationHandler.updateNotification()
-            } catch (e: Exception) {
-                Sentry.captureException(e)
             }
         }
     }
+
 
     // -------------------------------------------------------------------------
     // Lifecycle: onCreate
@@ -221,10 +300,8 @@ class BatteryService : Service() {
                 serviceScope,
                 getContentIntent = { contentIntent },
                 getCurrentDCS = { currentDCS },
-                getStationCodeShownThisSession = { false },
-                setStationCodeShownThisSession = {
-
-                },
+                getStationCodeShownThisSession = { stationCodeShownThisSession },
+                setStationCodeShownThisSession = { stationCodeShownThisSession = it },
                 getCurrentStationCode = { preferenceManager.getStationCode() }
             )
 
@@ -235,23 +312,31 @@ class BatteryService : Service() {
             internalBroadcastReceiver = BatteryServiceBroadcastHandler.createReceiver(
                 onDeviceInfoUpdated = { notificationHandler.updateNotification() },
                 onForNewDeviceCallClimateStatus = {
-                    // Reuse same debounced path so only one "online steps" run (and thus one SetClimateStatus)
-                    handleConnectivityIntent(null)
+                    serviceScope.launch {
+                        Log.d("getDeviceInfo","call onForNewDeviceCallClimateStatus")
+                        runSetClimateStatusIfReady()
+                    }
+                },
+                onBatteryIntent = {
+                    serviceScope.launch {
+                        handleBatteryIntent(it)
+                    }
                 },
                 onRequestGetDeviceInfo = {
+                    Log.d("getDeviceInfo","call onRequestGetDeviceInfo")
                     serviceScope.launch { deviceInfoApi.fetchDeviceInfo() }
                 },
-                onBatteryIntent = { handleConnectivityIntent(it) },
+
                 onConnectivityAction = { intent ->
                     serviceScope.launch {
-                        delay(500)
-                        handleConnectivityIntent(intent)
+
+
+                        handleWifiAndLocationIntent(intent)
                     }
                 }
             )
 
             notificationHandler.createChannels()
-            fetchInitialBatteryState()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startNotificationMonitoring()
             }
@@ -323,6 +408,8 @@ class BatteryService : Service() {
 
             if (wifiReady && locationReady) {
                 deviceInfoApi.getDeviceInfoOnlineOrNoInternet()
+            } else if (isCharging()) {
+                deviceInfoApi.applyOfflineChargingDeviceInfo()
             } else if (preferenceManager.getLastDeviceInfo() == null) {
                 deviceInfoApi.applyDefaultDeviceInfo()
             } else {
@@ -331,13 +418,6 @@ class BatteryService : Service() {
             }
         }
         notificationHandler.updateNotification()
-
-        if (chargeState?.isCharging == true && groupId != null) {
-            consumptionTracker.startTracking(groupId!!, chargeState!!.level, chargeState!!.voltage)
-            BatteryServiceConsumptionHandler.startPeriodicConsumptionReports(
-                serviceScope, { chargeState }, consumptionTracker
-            )
-        }
 
         return START_STICKY
     }
@@ -352,7 +432,7 @@ class BatteryService : Service() {
             var consecutiveMisses = 0
             while (true) {
                 delay(2000)
-                if (chargeState?.isCharging != true) {
+                if (!isCharging()) {
                     consecutiveMisses = 0
                     continue
                 }
@@ -368,22 +448,6 @@ class BatteryService : Service() {
                     consecutiveMisses = 0
                 }
             }
-        }
-    }
-
-    /** Read current battery state from system (used on service start). */
-    private fun fetchInitialBatteryState() {
-        try {
-            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-                ?: return
-            val result = BatteryServiceBatteryHandler.parseBatteryIntent(batteryIntent, null)
-                ?: return
-            chargeState = result.state
-            if (result.state.isCharging) {
-                groupId = java.util.UUID.randomUUID().toString()
-            }
-        } catch (e: Exception) {
-            Sentry.captureException(e)
         }
     }
 

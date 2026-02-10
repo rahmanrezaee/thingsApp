@@ -38,6 +38,28 @@ class BatteryServiceDeviceInfoApi(
     }
 
     /**
+     * Offline charging: check cached carbon budget and set ClimateStatus accordingly.
+     * If remainingBudget > 0 → status 8 (GreenOnDeviceCarbonBudget).
+     * If remainingBudget <= 0 → status 4 (NotGreenOnDeviceCarbonBudget).
+     * If no cached data → create defaults (status 8, budget 500g).
+     */
+    suspend fun applyOfflineChargingDeviceInfo() {
+        val cached = preferenceManager.getLastDeviceInfo()
+        if (cached != null) {
+            val budget = cached.remainingBudget ?: 0.0
+            val newStatus = if (budget > 0) 8 else 4
+            val updated = cached.copy(climateStatus = newStatus)
+            preferenceManager.saveLastDeviceInfo(updated)
+            Log.d(tag, "applyOfflineChargingDeviceInfo: budget=$budget → climateStatus=$newStatus")
+        } else {
+            applyDefaultDeviceInfo()
+            return
+        }
+        sendDeviceInfoUpdatedBroadcast()
+        onUpdated()
+    }
+
+    /**
      * Fetch device info when WiFi+location are ready. Register/getToken are done in SplashViewModel.
      * If no token (e.g. app started without splash), apply default offline info.
      */
@@ -47,6 +69,8 @@ class BatteryServiceDeviceInfoApi(
             Log.d(tag, "runGetDeviceInfoOnce: no token (Splash handles register/getToken) - applying default")
             applyDefaultDeviceInfo()
         } else {
+
+            Log.d("getDeviceInfo","call getDeviceInfoOnlineOrNoInternet")
             NetworkModule.setAuthToken(token)
             fetchDeviceInfo()
         }

@@ -14,188 +14,170 @@ import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Manages climate status API calls when charging starts.
  * Caller (BatteryService) must ensure WiFi and location are available before calling.
+ * If a new request arrives while one is in progress, the old one is cancelled.
  */
 class ClimateStatusManager(private val context: Context) {
 
-    private val TAG = "ClimateStatusManager"
+    companion object {
+        private const val TAG = "getDeviceInfo"
+        private const val API_TIMEOUT_MS = 10_000L
+        private const val WIFI_MAX_RETRIES = 3
+        private const val WIFI_RETRY_DELAY_MS = 1500L
+        private const val STATION_CODE_NOTIFICATION_ID = 2
+    }
+
+    private var currentJob: Job? = null
 
     /**
      * Calls SetClimateStatus then GetDeviceInfo. Updates preferences with result.
-     * Caller should only invoke when wifi+location are ready.
+     * Cancels any in-progress request before starting a new one.
      *
      * @return Climate status from API if successful, null otherwise
      */
     suspend fun handleChargingStarted(
+        job: Job,
         onLocationError: ((reason: String, details: String, isPermissionDenied: Boolean, isServicesDisabled: Boolean) -> Unit)? = null
     ): Int? {
+        // Cancel any previous in-flight request
+        currentJob?.cancel()
+        currentJob = job
+
         return try {
             val deviceId = DeviceUtils.getStoredDeviceId(context)
-            if (deviceId == null) {
-                Log.w(TAG, "handleChargingStarted skipped: no deviceId")
-                return null
-            }
-            // On first launch Splash/register may not have run yet when BatteryService calls us,
-            // so token can be null; SetClimateStatus is skipped and getDeviceInfo's climateStatus is used.
-            if (NetworkModule.getAuthToken().isNullOrBlank()) {
-                Log.d(TAG, "handleChargingStarted skipped: no auth token")
-                // #region agent log
-                Log.d(TAG, "SetClimateStatusDebug {\"hypothesisId\":\"H2\",\"message\":\"handleChargingStarted skipped: no auth token\",\"hasToken\":false}")
-                // #endregion
+            if (deviceId.isNullOrBlank()) {
+                Log.w(TAG, "Skipped: no deviceId")
                 return null
             }
 
-            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(context, maxRetries = 3, delayMs = 1500L)
+            if (NetworkModule.getAuthToken().isNullOrBlank()) {
+                Log.d(TAG, "Skipped: no auth token")
+                return null
+            }
+
+            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(context, maxRetries = WIFI_MAX_RETRIES, delayMs = WIFI_RETRY_DELAY_MS)
             if (!wifiResult.success || wifiResult.bssid == null) {
                 Log.w(TAG, "WiFi BSSID not available: ${wifiResult.errorReason}")
                 return null
             }
 
-            val hasLocationPermission = LocationUtils.hasLocationPermission(context)
-            val isLocationEnabled = LocationUtils.isLocationEnabled(context)
-            if (!hasLocationPermission || !isLocationEnabled) {
+            val hasPermission = LocationUtils.hasLocationPermission(context)
+            val isEnabled = LocationUtils.isLocationEnabled(context)
+            if (!hasPermission || !isEnabled) {
                 onLocationError?.invoke(
-                    if (!hasLocationPermission) "Location permission denied" else "Location services disabled",
+                    if (!hasPermission) "Location permission denied" else "Location services disabled",
                     "Location required for carbon tracking.",
-                    !hasLocationPermission,
-                    !isLocationEnabled
+                    !hasPermission,
+                    !isEnabled
                 )
                 return null
             }
 
-            // #region agent log
-            Log.d(TAG, "SetClimateStatusDebug {\"hypothesisId\":\"H2\",\"message\":\"handleChargingStarted proceeding to SetClimateStatus API\",\"hasToken\":true}")
-            // #endregion
-            setClimateStatusOnChargingStart(deviceId, wifiResult.bssid)
+            val climateStatus = callSetClimateStatus(deviceId, wifiResult.bssid)
+            callGetDeviceInfo(deviceId, wifiResult.bssid)
+            climateStatus
         } catch (e: Exception) {
-            Log.e(TAG, "Error handling charging event: ${e.message}", e)
+            Log.e(TAG, "Error: ${e.message}", e)
             Sentry.withScope { scope ->
-                scope.setTag("operation", "handleChargingEvent")
-                scope.setContexts("charging", mapOf(
-                    "device_id" to (DeviceUtils.getStoredDeviceId(context) ?: "null")
-                ))
+                scope.setTag("operation", "handleChargingStarted")
+                Sentry.captureException(e)
+            }
+            null
+        } finally {
+            if (currentJob == job) currentJob = null
+        }
+    }
+
+    /**
+     * Call SetClimateStatus API
+     */
+    private suspend fun callSetClimateStatus(deviceId: String, wiFiAddress: String): Int? {
+        return try {
+            val (lat, lng) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
+            val request = SetClimateStatusRequest(
+                deviceId = deviceId,
+                latitude = lat,
+                longitude = lng,
+                wiFiAddress = wiFiAddress
+            )
+
+            val response = withTimeoutOrNull(API_TIMEOUT_MS) {
+                NetworkModule.api.setClimateStatus(request)
+            }
+
+            if (response?.isSuccessful == true) {
+                response.body()?.data?.climateStatus.also {
+                    Log.d(TAG, "SetClimateStatus success: climateStatus=$it")
+                }
+            } else {
+                Log.w(TAG, "SetClimateStatus failed: ${response?.code() ?: "timeout"}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SetClimateStatus error: ${e.message}", e)
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "setClimateStatus")
                 Sentry.captureException(e)
             }
             null
         }
     }
 
-
-    
     /**
-     * Call SetClimateStatus API when charging starts
+     * Call GetDeviceInfo API and save result
      */
-    private suspend fun setClimateStatusOnChargingStart(
-        deviceId: String?,
-        wiFiAddress: String?
-    ): Int? {
-        if (deviceId == null || wiFiAddress.isNullOrBlank()) {
-            Log.d(TAG, "setClimateStatus skipped: missing deviceId or wiFiAddress")
-            return null
-        }
-        
-        if (NetworkModule.getAuthToken().isNullOrBlank()) {
-            Log.d(TAG, "setClimateStatus skipped: no auth token")
-            return null
-        }
-        
-        var climateStatusInt: Int? = null
+    private suspend fun callGetDeviceInfo(deviceId: String, wiFiAddress: String) {
         try {
-            val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
-            val request = SetClimateStatusRequest(
-                deviceId = deviceId,
-                latitude = latitude,
-                longitude = longitude,
-                wiFiAddress = wiFiAddress
-            )
-            
-            val response = kotlinx.coroutines.withTimeoutOrNull(10000) {
-                NetworkModule.api.setClimateStatus(request)
-            }
-            
-            if (response?.isSuccessful == true) {
-                response.body()?.data?.let { data ->
-                    climateStatusInt = data.climateStatus
-                    Log.d(TAG, "setClimateStatus success: isGreen=${data.isGreen}, climateStatus=${data.climateStatus}")
-                }
-            } else {
-                Log.w(TAG, "setClimateStatus failed: ${response?.code() ?: "timeout"}")
-            }
-
-            // Call GetDeviceInfo (wiFiAddress is mandatory; we already checked !wiFiAddress.isNullOrBlank())
-            getDeviceInfoOnChargingStart(deviceId, wiFiAddress)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "setClimateStatus error: ${e.message}", e)
-            Sentry.withScope { scope ->
-                scope.setTag("operation", "setClimateStatus")
-                Sentry.captureException(e)
-            }
-        }
-        return climateStatusInt
-    }
-    
-    /**
-     * Call GetDeviceInfo API when charging starts
-     */
-    private suspend fun getDeviceInfoOnChargingStart(
-        deviceId: String,
-        wiFiAddress: String
-    ) {
-
-
-        try {
-            val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
+            val (lat, lng) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val request = DeviceInfoRequest(
                 deviceId = deviceId,
                 wifiAddress = wiFiAddress,
-                latitude = latitude,
-                longitude = longitude
+                latitude = lat,
+                longitude = lng
             )
-            
-            val response = kotlinx.coroutines.withTimeoutOrNull(10000) {
+
+            val response = withTimeoutOrNull(API_TIMEOUT_MS) {
                 NetworkModule.api.getDeviceInfo(request)
             }
-            
-            if (response?.isSuccessful == true) {
-                response.body()?.data?.let { deviceInfo ->
-                    Log.d(TAG, "getDeviceInfo success")
-                    
-                    // Save to PreferenceManager (local + backend)
-                    val prefManager = PreferenceManager(context)
 
-                    prefManager.saveDeviceInfo(deviceInfo)
-                    // #region agent log
-                    val hasStation = deviceInfo.stationInfo != null
-                    prefManager.setHasStation(hasStation)
-                    if (deviceInfo.stationInfo != null) {
-                        prefManager.saveStationInfo(deviceInfo.stationInfo)
-                        prefManager.saveStationCode(deviceInfo.stationInfo.stationCode)
-                    }
-                    prefManager.saveLastWifiBssid(wiFiAddress)
-                    
-                    // If climate status is green, dismiss all station code notifications
-                    val climateStatus = deviceInfo.climateStatus
-                    if (climateStatus != null && climateStatus in API_GREEN_CLIMATE_STATUSES) {
-                        Log.d(TAG, "Climate status is green ($climateStatus), dismissing station code notifications")
-                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                        notificationManager.cancel(2) // STATION_CODE_NOTIFICATION_ID
-                    }
-                    
-                    // Single broadcast: HomeViewModel & BatteryService both listen to this
-                    val intent = Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
-                        setPackage(context.packageName) // Make it explicit for same-app delivery
-                    }
-                    context.sendBroadcast(intent)
-                }
-            } else {
-                Log.w(TAG, "getDeviceInfo failed: ${response?.code() ?: "timeout"}")
+            if (response?.isSuccessful != true) {
+                Log.w(TAG, "GetDeviceInfo failed: ${response?.code() ?: "timeout"}")
+                return
             }
+
+            val deviceInfo = response.body()?.data ?: return
+
+            val prefManager = PreferenceManager(context)
+            prefManager.saveDeviceInfo(deviceInfo)
+            prefManager.setHasStation(deviceInfo.stationInfo != null)
+            deviceInfo.stationInfo?.let {
+                prefManager.saveStationInfo(it)
+                prefManager.saveStationCode(it.stationCode)
+            }
+            prefManager.saveLastWifiBssid(wiFiAddress)
+
+            // Dismiss station code notification if climate status is green
+            val climateStatus = deviceInfo.climateStatus
+            if (climateStatus != null && climateStatus in API_GREEN_CLIMATE_STATUSES) {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(STATION_CODE_NOTIFICATION_ID)
+            }
+
+            // Broadcast so HomeViewModel & BatteryService update UI
+            context.sendBroadcast(
+                Intent(BatteryServiceActions.DEVICEINFO_UPDATED).apply {
+                    setPackage(context.packageName)
+                }
+            )
+
+            Log.d(TAG, "GetDeviceInfo success")
         } catch (e: Exception) {
-            Log.e(TAG, "getDeviceInfo error: ${e.message}", e)
+            Log.e(TAG, "GetDeviceInfo error: ${e.message}", e)
             Sentry.withScope { scope ->
                 scope.setTag("operation", "getDeviceInfo")
                 Sentry.captureException(e)

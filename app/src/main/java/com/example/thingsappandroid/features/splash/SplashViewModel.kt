@@ -2,6 +2,7 @@ package com.example.thingsappandroid.features.splash
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Intent
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
 import com.example.thingsappandroid.data.remote.NetworkModule
+import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -85,6 +87,11 @@ class SplashViewModel @Inject constructor(
 
             if (success && token != null) {
                 Log.d("SplashViewModel", "✓ Registered and got token successfully")
+                if (cachedToken.isNullOrEmpty()) {
+                    Intent(BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS).apply {
+                        setPackage(getApplication<Application>().packageName)
+                    }.also { getApplication<Application>().sendBroadcast(it) }
+                }
                 tryNavigateToHomeOrRequestLocation()
             } else {
                 Log.e("SplashViewModel", "Register/get token failed")

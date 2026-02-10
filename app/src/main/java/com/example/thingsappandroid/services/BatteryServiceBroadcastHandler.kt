@@ -82,15 +82,9 @@ object BatteryServiceBroadcastHandler {
         }
     }
 
-    fun isBatteryIntent(action: String?): Boolean =
-        action in listOf(
-            Intent.ACTION_BATTERY_CHANGED,
-            Intent.ACTION_POWER_CONNECTED,
-            Intent.ACTION_POWER_DISCONNECTED
-        )
 
     fun getChargingStatusFromIntent(intent: Intent?): Boolean? {
-        if (!isBatteryIntent(intent?.action)) return null
+
         val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: return null
         return status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL

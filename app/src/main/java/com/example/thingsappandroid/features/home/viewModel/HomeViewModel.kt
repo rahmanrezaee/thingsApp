@@ -632,17 +632,12 @@ class HomeViewModel @Inject constructor(
                 if (result.isSuccessful) {
                     _effect.send(ActivityEffect.StationUpdateSuccess)
                     _state.update { it.copy(showStationCodeDialog = false) }
-                    // SetClimateStatus only when charging; never when not charging
                     if (_state.value.isCharging) {
-                        withContext(Dispatchers.IO) {
-
-                            Log.d("getDeviceInfo", "ClimateStatusManager submitStationCode")
-                            ClimateStatusManager(getApplication()).handleChargingStarted()
-                        }
+                        Intent(BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS).apply {
+                            setPackage(getApplication<Application>().packageName)
+                        }.also { getApplication<Application>().sendBroadcast(it) }
                     }
-                    sendRequestGetDeviceInfo(stationCode)
                 } else {
-                    // Keep dialog open and show error
                     val errorMsg = result.errorBody()?.string() ?: "Failed to update station code"
                     _state.update { it.copy(stationCodeError = errorMsg) }
                 }
