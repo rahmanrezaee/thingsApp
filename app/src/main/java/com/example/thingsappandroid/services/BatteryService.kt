@@ -156,7 +156,7 @@ class BatteryService : Service() {
                 runStopTracking(result.level, result.voltage)
             }
             groupId = null
-            notificationHandler.updateNotification()
+            notificationHandler.updateNotification()    
             return
         }
 
@@ -173,17 +173,20 @@ class BatteryService : Service() {
         }
 
         Log.d("BatteryService", "handleBatteryIntent: calling runSetClimateStatusIfReady")
-        runSetClimateStatusIfReady()
+        runSetClimateStatusIfReady(null)
+
+       
     }
 
-    private suspend fun runSetClimateStatusIfReady() {
+    private suspend fun runSetClimateStatusIfReady(climateStatusIntent: Intent?) {
         val wifiReady = BatteryServiceBroadcastHandler.isWiFiConnected(applicationContext)
         val locationReady = LocationUtils.hasLocationPermission(applicationContext) &&
                 LocationUtils.isLocationEnabled(applicationContext)
         val charging = isCharging()
         val apiLevel = Build.VERSION.SDK_INT
+        val stationCode = climateStatusIntent?.getStringExtra(BatteryServiceActions.EXTRA_STATION_CODE)
 
-        Log.d("BatteryService", "runSetClimateStatusIfReady: wifiReady=$wifiReady, locationReady=$locationReady, isCharging=$charging, apiLevel=$apiLevel")
+        Log.d("BatteryService", "runSetClimateStatusIfReady: wifiReady=$wifiReady, locationReady=$locationReady, isCharging=$charging, apiLevel=$apiLevel, stationCode=${stationCode?.take(4)?.let { "$it***" } ?: "null"}")
 
         notificationHandler.cancelStationCodeNotification()
         stationCodeShownThisSession = false
@@ -192,17 +195,25 @@ class BatteryService : Service() {
             try {
                 Log.d("BatteryService", "runSetClimateStatusIfReady: calling climateStatusManager.handleChargingStarted")
                 val climateStatus = climateStatusManager.handleChargingStarted(
-                    job = currentCoroutineContext()[Job]!!
+                    job = currentCoroutineContext()[Job]!!,
+                    stationCode = stationCode
                 ) { reason, details, isPermissionDenied, isServicesDisabled ->
                     Log.w("BatteryService", "runSetClimateStatusIfReady: location error reason=$reason, details=$details, permDenied=$isPermissionDenied, servicesDisabled=$isServicesDisabled")
                     if (isCharging()) notificationHandler.showLocationErrorNotification(reason, details, isPermissionDenied, isServicesDisabled)
                 }
+
+                if (notificationHandler.shouldShowStationCodeNotification(isCharging())) {
+                    Log.d("BatteryService", "handleBatteryIntent: WiFi+Location already on → maybeShowStationCodeNotificationOnce")
+                    notificationHandler.maybeShowStationCodeNotificationOnce()
+                }
+
                 Log.d("BatteryService", "runSetClimateStatusIfReady: climateStatus result=$climateStatus")
             } catch (e: Exception) {
                 Log.e("BatteryService", "runSetClimateStatusIfReady: error ${e.message}", e)
                 Sentry.captureException(e)
             }
         } else {
+
             Log.d("BatteryService", "runSetClimateStatusIfReady: conditions not met, skipping SetClimateStatus")
         }
 
@@ -238,8 +249,10 @@ class BatteryService : Service() {
                         preferenceManager.saveLastWifiBssid(currentBssid)
                     }
 
-                    if (bssidChanged) {
-                        Log.d("getDeviceInfo","call bssidChanged")
+                    if (bssidChanged && isCharging()) {
+                        Log.d("getDeviceInfo", "call bssidChanged → runSetClimateStatusIfReady")
+                        runSetClimateStatusIfReady(null)
+                    } else {
                         deviceInfoApi.fetchDeviceInfo()
                     }
 
@@ -311,10 +324,10 @@ class BatteryService : Service() {
 
             internalBroadcastReceiver = BatteryServiceBroadcastHandler.createReceiver(
                 onDeviceInfoUpdated = { notificationHandler.updateNotification() },
-                onForNewDeviceCallClimateStatus = {
+                onForNewDeviceCallClimateStatus = { intent ->
                     serviceScope.launch {
                         Log.d("getDeviceInfo","call onForNewDeviceCallClimateStatus")
-                        runSetClimateStatusIfReady()
+                        runSetClimateStatusIfReady(intent)
                     }
                 },
                 onBatteryIntent = {
