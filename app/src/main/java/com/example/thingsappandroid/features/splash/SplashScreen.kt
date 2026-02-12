@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,11 +42,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.components.PrimaryButton
-import com.example.thingsappandroid.ui.theme.BackgroundWhite
+import com.example.thingsappandroid.ui.theme.Gray900
 import com.example.thingsappandroid.ui.theme.PrimaryGreen
-import com.example.thingsappandroid.ui.theme.SecondaryGreen
-import com.example.thingsappandroid.ui.theme.TextPrimary
-import com.example.thingsappandroid.ui.theme.TextSecondary
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable
@@ -57,10 +55,11 @@ fun SplashScreen(
     onGrantPermissions: () -> Unit = {},
     hasBackgroundLocation: Boolean = false
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundWhite),
+            .background(colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         // Show logo only when permissions are granted and loading
@@ -70,22 +69,30 @@ fun SplashScreen(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxSize()
             ) {
-                Box(
-                    modifier = Modifier.size(180.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo),
-                        contentDescription = "App Logo",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-                Spacer(modifier = Modifier.height(32.dp))
-                CircularProgressIndicator(
-                    color = PrimaryGreen,
-                    modifier = Modifier.size(40.dp)
+                val isDarkTheme = colorScheme.background == Gray900
+                val logoRes = if (isDarkTheme) R.drawable.logo_name_light else R.drawable.logo_name
+                Spacer(modifier = Modifier.weight(0.3f))
+                Image(
+                    painter = painterResource(id =  R.drawable.logo ),
+                    contentDescription = "ThingsApp Logo",
+                    modifier = Modifier.size(150.dp),
+                    contentScale = ContentScale.Fit
                 )
+                Image(
+                    painter = painterResource(id = logoRes),
+                    contentDescription = "ThingsApp Logo",
+                    modifier = Modifier.width(180.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "ThingsApp by Umweltify",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
+                    )
+                )
+                Spacer(modifier = Modifier.weight(0.2f))
             }
         } else {
             // Permission request screen - no logo for more space
@@ -122,7 +129,7 @@ fun SplashScreen(
                 Text(
                     text = "Required Permissions",
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = TextPrimary,
+                    color = colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
                 
@@ -132,7 +139,7 @@ fun SplashScreen(
                 Text(
                     text = "ThingsApp needs two permissions to work:",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -171,7 +178,7 @@ fun SplashScreen(
                         Text(
                             text = "How to grant permissions:",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = TextPrimary
+                            color = colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         InstructionStep(
@@ -226,7 +233,7 @@ fun SplashScreen(
                 Text(
                     "One more step",
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = TextPrimary,
+                    color = colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -239,7 +246,7 @@ fun SplashScreen(
                     Text(
                         "Choose \"Allow all the time\" for Location so the app can track your charging sessions automatically.",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -258,7 +265,7 @@ fun SplashScreen(
                             Text(
                                 "This enables:",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = TextPrimary
+                                color = colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             BenefitRow("Track charging sessions automatically")
@@ -273,7 +280,7 @@ fun SplashScreen(
                     Text(
                         "How to do it:",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
+                        color = colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     InstructionStep("1", "Tap \"Open Settings\" below")
@@ -312,10 +319,11 @@ private fun PermissionCard(
     subtitle: String,
     description: String
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = BackgroundWhite
+            containerColor = colorScheme.surfaceContainerHighest
         ),
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -351,7 +359,7 @@ private fun PermissionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = TextPrimary
+                    color = colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -363,7 +371,7 @@ private fun PermissionCard(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-                    color = TextSecondary
+                    color = colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -392,7 +400,7 @@ private fun InstructionStep(
             Text(
                 text = number,
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = BackgroundWhite
+                color = MaterialTheme.colorScheme.onPrimary
             )
         }
         
@@ -401,7 +409,7 @@ private fun InstructionStep(
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
     }
@@ -428,7 +436,7 @@ private fun BenefitRow(text: String) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
     }
@@ -465,7 +473,7 @@ private fun BackgroundLocationDialogPreview() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BackgroundWhite)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             SplashScreen(
                 showBackgroundLocationDialog = true,
@@ -474,5 +482,27 @@ private fun BackgroundLocationDialogPreview() {
                 onBackgroundLocationOpenSettings = {}
             )
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun SplashScreenLogoPreviewLight() {
+    ThingsAppAndroidTheme(darkTheme = false) {
+        SplashScreen(
+            hasRequiredPermissions = true,
+            hasBackgroundLocation = true
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun SplashScreenLogoPreviewDark() {
+    ThingsAppAndroidTheme(darkTheme = true) {
+        SplashScreen(
+            hasRequiredPermissions = true,
+            hasBackgroundLocation = true
+        )
     }
 }

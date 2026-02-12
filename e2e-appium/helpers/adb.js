@@ -18,11 +18,12 @@ function execAdb(args, deviceId) {
 
 /**
  * Set device to "charging" state (AC connected). Use resetBattery() after test to restore.
+ * On emulator, BatteryService reads EXTRA_STATUS from BATTERY_CHANGED; we set status 2 (CHARGING).
  * @param {string} [deviceId] - Optional device serial from adb devices
  */
 function setCharging(deviceId) {
   execAdb('shell dumpsys battery set ac 1', deviceId);
-  execAdb('shell dumpsys battery set status 2', deviceId); // 2 = CHARGING
+  execAdb('shell dumpsys battery set status 2', deviceId); // 2 = BATTERY_STATUS_CHARGING
 }
 
 /**
@@ -41,20 +42,88 @@ function resetBattery(deviceId) {
   execAdb('shell dumpsys battery reset', deviceId);
 }
 
+const E2E_NET_PREFIX = '[E2E-NET]';
+
+/**
+ * Get current airplane mode setting (0 = off, 1 = on). Returns string '0'|'1' or null.
+ */
+function getAirplaneModeState(deviceId) {
+  const out = execAdb('shell settings get global airplane_mode_on', deviceId);
+  if (out == null) return null;
+  const v = (out || '').trim();
+  return v === '1' || v === '0' ? v : null;
+}
+
+/**
+ * Get a short summary of WiFi/connectivity for logging (best-effort).
+ */
+function getConnectivitySummary(deviceId) {
+  const wifiOn = execAdb('shell settings get global wifi_on', deviceId);
+  const airplane = getAirplaneModeState(deviceId);
+  return {
+    airplane_mode_on: airplane,
+    wifi_on: (wifiOn || '').trim(),
+  };
+}
+
+/**
+ * Log current network state to console for debugging "network still on" in offline tests.
+ * Call after setNetworkOff() to verify the setting stuck.
+ */
+function logNetworkState(deviceId, prefix) {
+  const p = prefix || E2E_NET_PREFIX;
+  const s = getConnectivitySummary(deviceId);
+  console.log(`${p} airplane_mode_on=${s.airplane_mode_on} wifi_on=${s.wifi_on}`);
+}
+
 /**
  * Turn airplane mode OFF (enable network). Uses only settings (no broadcast) to avoid
  * SecurityException on some devices (e.g. Xiaomi/Android 15) where shell cannot send AIRPLANE_MODE.
  */
 function setNetworkOn(deviceId) {
+  console.log(`${E2E_NET_PREFIX} setNetworkOn() called`);
   execAdb('shell settings put global airplane_mode_on 0', deviceId);
+  execAdb('shell svc wifi enable', deviceId);
+  logNetworkState(deviceId, E2E_NET_PREFIX);
 }
 
 /**
- * Turn airplane mode ON (disable network). Uses only settings (no broadcast) to avoid
- * SecurityException on some devices.
+ * Turn airplane mode ON (disable network). Uses settings put first; then tries broadcast
+ * so the change takes effect on emulators (settings-only may not apply immediately).
+ * Also disables WiFi via "svc wifi disable" so the app does not see WiFi even if
+ * airplane_mode is ignored on the emulator. Broadcast is best-effort.
  */
 function setNetworkOff(deviceId) {
+  console.log(`${E2E_NET_PREFIX} setNetworkOff() called (airplane_mode=1 + svc wifi disable)`);
   execAdb('shell settings put global airplane_mode_on 1', deviceId);
+  try {
+    execAdb('shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true', deviceId);
+  } catch (e) {
+    // Ignore SecurityException / not permitted on some devices
+  }
+  const wifiOut = execAdb('shell svc wifi disable', deviceId);
+  if (wifiOut != null) {
+    console.log(`${E2E_NET_PREFIX} svc wifi disable executed`);
+  } else {
+    console.log(`${E2E_NET_PREFIX} svc wifi disable may have failed (no output)`);
+  }
+  logNetworkState(deviceId, E2E_NET_PREFIX);
+}
+
+/**
+ * Turn location services on or off (best-effort; Android 10+ uses location_mode).
+ * Caller should pause after to let the app see the change.
+ * @param {string} [deviceId] - Optional device serial
+ * @param {boolean} enabled - true = on, false = off
+ */
+function setLocationEnabled(deviceId, enabled) {
+  try {
+    execAdb(`shell settings put secure location_mode ${enabled ? 3 : 0}`, deviceId);
+  } catch (e) {
+    try {
+      execAdb(`shell settings put secure location_providers_allowed ${enabled ? '+gps,+network' : ''}`, deviceId);
+    } catch (_) {}
+  }
 }
 
 /**
@@ -128,6 +197,47 @@ function resumeApp(deviceId) {
 }
 
 /**
+ * Force-stop the app (full close). Use before reopen to test subsequent launch flow.
+ * @param {string} [deviceId] - Optional device serial
+ */
+function forceStopApp(deviceId) {
+  execAdb(`shell am force-stop ${PACKAGE}`, deviceId);
+}
+
+/**
+ * Launch the app (main activity). Use after forceStopApp to reopen the app.
+ * @param {string} [deviceId] - Optional device serial
+ */
+function launchApp(deviceId) {
+  execAdb(`shell am start -n ${PACKAGE}/${MAIN_ACTIVITY}`, deviceId);
+}
+
+/**
+ * Press Home key to send app to background (minimize).
+ * @param {string} [deviceId] - Optional device serial
+ */
+function pressHome(deviceId) {
+  execAdb('shell input keyevent KEYCODE_HOME', deviceId);
+}
+
+/**
+ * Press Back key (e.g. close notification shade).
+ * @param {string} [deviceId] - Optional device serial
+ */
+function pressBack(deviceId) {
+  execAdb('shell input keyevent KEYCODE_BACK', deviceId);
+}
+
+/**
+ * Open Settings app so the app under test is clearly in background (not just Home key).
+ * Use before "plug charger" in 3.1 so BatteryService receives charger intent while app is in background.
+ * @param {string} [deviceId] - Optional device serial
+ */
+function openSettingsApp(deviceId) {
+  execAdb('shell am start -a android.settings.SETTINGS', deviceId);
+}
+
+/**
  * Clear app data (fresh install state for first launch).
  * Use when app is already installed and you want "first launch" behavior.
  */
@@ -195,6 +305,18 @@ function getFirstDeviceId() {
 }
 
 /**
+ * Clear logcat buffer. Use before a specific action (e.g. reopen app) so subsequent getApiLogMessages only see new entries.
+ * @param {string} [deviceId] - Optional device serial
+ */
+function clearLogcat(deviceId) {
+  try {
+    execAdb('shell logcat -c', deviceId);
+  } catch (e) {
+    // ignore
+  }
+}
+
+/**
  * Start live API_LOG stream: clears logcat, then tails logcat and invokes onLine(msg) for each API_LOG line.
  * Returns the child process; call .kill() on it in after() to stop.
  * @param {string} [deviceId] - Optional device serial
@@ -222,15 +344,58 @@ function startLiveApiLog(deviceId, onLine) {
   return child;
 }
 
+/**
+ * Check if the app process is running.
+ * @param {string} [deviceId] - Optional device serial
+ * @returns {boolean}
+ */
+function isAppRunning(deviceId) {
+  try {
+    const out = execAdb(`shell pidof ${PACKAGE}`, deviceId);
+    const pid = (out || '').trim();
+    return pid.length > 0 && /^\d+$/.test(pid);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Check that no ANR (Application Not Responding) occurred for the app.
+ * @param {string} [deviceId] - Optional device serial
+ * @returns {boolean} true if no ANR found in recent logcat
+ */
+function checkNoANR(deviceId) {
+  try {
+    const out = deviceId
+      ? execSync(`adb -s ${deviceId} shell logcat -d -t 300`, { encoding: 'utf8', timeout: 5000 })
+      : execSync('adb shell logcat -d -t 300', { encoding: 'utf8', timeout: 5000 });
+    const lines = (out || '').split('\n');
+    const anrForApp = lines.some((l) => /ANR in|am_anr/i.test(l) && l.includes(PACKAGE));
+    return !anrForApp;
+  } catch (e) {
+    return true;
+  }
+}
+
 module.exports = {
   setCharging,
   setNotCharging,
   resetBattery,
   setNetworkOn,
   setNetworkOff,
+  setLocationEnabled,
+  getAirplaneModeState,
+  getConnectivitySummary,
+  logNetworkState,
   uninstallApp,
   grantAppPermissions,
   resumeApp,
+  forceStopApp,
+  launchApp,
+  pressHome,
+  pressBack,
+  openSettingsApp,
+  clearLogcat,
   applyPreconditions,
   setupPreconditions,
   clearAppData,
@@ -239,5 +404,7 @@ module.exports = {
   getApiLogMessages,
   getFirstDeviceId,
   startLiveApiLog,
+  isAppRunning,
+  checkNoANR,
   PACKAGE,
 };

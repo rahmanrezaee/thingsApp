@@ -8,8 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.theme.TextSecondary
-
 /**
  * Grey section header for profile/settings screens (e.g. "Your account", "Support").
  */
@@ -21,7 +19,7 @@ fun ProfileSectionHeader(
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium.copy(
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium
         ),
         modifier = modifier

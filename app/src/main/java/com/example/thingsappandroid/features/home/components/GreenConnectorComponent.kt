@@ -30,16 +30,14 @@ fun GreenConnectorComponent(
     val isConnected = isWifiConnected && stationInfo != null
     val isGreen = isWifiConnected && stationInfo?.isGreen == true
     
-    // Status color: green if connected and green, red if connected but not green, gray if not connected
+    val colorScheme = MaterialTheme.colorScheme
     val statusColor = when {
         isConnected && isGreen -> ActivityGreen
         isConnected && !isGreen -> ErrorRed
-        else -> Gray400
+        else -> colorScheme.onSurfaceVariant
     }
-    
-    // Icon circle background: always grey, only the icon changes
-    val iconCircleBackground = Color(0xFFF5F5F5)
-    
+    val iconCircleBackground = colorScheme.surfaceContainerHighest
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.TopEnd) {
             Box(
@@ -79,7 +77,7 @@ fun GreenConnectorComponent(
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Gray900,
+                color = colorScheme.onSurface,
                 lineHeight = 18.sp
             ),
             textAlign = TextAlign.Center

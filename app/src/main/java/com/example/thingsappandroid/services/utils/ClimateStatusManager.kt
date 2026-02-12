@@ -38,10 +38,12 @@ class ClimateStatusManager(private val context: Context) {
      * Calls SetClimateStatus then GetDeviceInfo. Updates preferences with result.
      * Cancels any in-progress request before starting a new one.
      *
+     * @param stationCode Optional station code to send with SetClimateStatus (e.g. after user set station).
      * @return Climate status from API if successful, null otherwise
      */
     suspend fun handleChargingStarted(
         job: Job,
+        stationCode: String? = null,
         onLocationError: ((reason: String, details: String, isPermissionDenied: Boolean, isServicesDisabled: Boolean) -> Unit)? = null
     ): Int? {
         // Cancel any previous in-flight request
@@ -78,7 +80,7 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
-            val climateStatus = callSetClimateStatus(deviceId, wifiResult.bssid)
+            val climateStatus = callSetClimateStatus(deviceId, wifiResult.bssid, stationCode)
             callGetDeviceInfo(deviceId, wifiResult.bssid)
             climateStatus
         } catch (e: Exception) {
@@ -94,16 +96,17 @@ class ClimateStatusManager(private val context: Context) {
     }
 
     /**
-     * Call SetClimateStatus API
+     * Call SetClimateStatus API with DeviceId, WiFiAddress, Location, and optional StationCode.
      */
-    private suspend fun callSetClimateStatus(deviceId: String, wiFiAddress: String): Int? {
+    private suspend fun callSetClimateStatus(deviceId: String, wiFiAddress: String, stationCode: String? = null): Int? {
         return try {
             val (lat, lng) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val request = SetClimateStatusRequest(
                 deviceId = deviceId,
                 latitude = lat,
                 longitude = lng,
-                wiFiAddress = wiFiAddress
+                wiFiAddress = wiFiAddress,
+                stationCode = stationCode
             )
 
             val response = withTimeoutOrNull(API_TIMEOUT_MS) {

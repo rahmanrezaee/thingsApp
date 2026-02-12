@@ -40,7 +40,7 @@ fun ElectricityBatteryBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = BackgroundWhite,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -48,7 +48,7 @@ fun ElectricityBatteryBottomSheet(
                     .width(40.dp)
                     .height(4.dp)
                     .background(
-                        color = Gray300,
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(2.dp)
                     )
             )
@@ -68,7 +68,7 @@ fun ElectricityBatteryBottomSheet(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -81,7 +81,7 @@ fun ElectricityBatteryBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -91,7 +91,7 @@ fun ElectricityBatteryBottomSheet(
                 text = "Device Battery Details",
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -124,7 +124,9 @@ fun ElectricityBatteryBottomSheet(
             OutlinedButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
             ) {
                 Text(
                     text = "Close",

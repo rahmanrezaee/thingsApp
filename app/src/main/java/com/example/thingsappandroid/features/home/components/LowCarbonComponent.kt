@@ -29,12 +29,13 @@ fun LowCarbonComponent(
     intensity: Int = 96,
     isGreen: Boolean = false
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFF5F5F5))
+                .background(colorScheme.surfaceContainerHighest)
                 .then(if (isGreen) Modifier.alpha(0.55f) else Modifier),
             contentAlignment = Alignment.Center
         ) {
@@ -56,7 +57,7 @@ fun LowCarbonComponent(
             },
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 13.sp,
-                color = Gray900,
+                color = colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium,
                 lineHeight = 18.sp
             ),

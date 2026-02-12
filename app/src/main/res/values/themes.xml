@@ -1,15 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.ThingsAppAndroid" parent="android:Theme.Material.Light.NoActionBar" />
-    
+    <style name="Theme.ThingsAppAndroid" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+    <!-- Launcher theme used only for native splash (empty screen). -->
+    <style name="Theme.ThingsAppAndroid.Launcher" parent="Theme.ThingsAppAndroid">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+    </style>
+
     <!-- Transparent theme for charging notification activities -->
-    <style name="Theme.App.Transparent" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.App.Transparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
 </resources>

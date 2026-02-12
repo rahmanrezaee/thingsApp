@@ -19,10 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.theme.Gray100
-import com.example.thingsappandroid.ui.theme.Gray500
 import com.example.thingsappandroid.ui.theme.Shapes
-import com.example.thingsappandroid.ui.theme.TextPrimary
 
 /**
  * Reusable profile/settings list row: icon, label, chevron. Card-style, clickable.
@@ -34,12 +31,13 @@ fun ProfileListItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = Shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Gray100),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerHighest),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
@@ -57,13 +55,13 @@ fun ProfileListItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Gray500,
+                    tint = colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        color = TextPrimary,
+                        color = colorScheme.onSurface,
                         fontWeight = FontWeight.Medium
                     )
                 )
@@ -71,7 +69,7 @@ fun ProfileListItem(
             Icon(
                 imageVector = Icons.Default.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Gray500,
+                tint = colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
         }

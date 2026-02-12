@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,11 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
 import com.example.thingsappandroid.ui.theme.ThemeMode
 import com.example.thingsappandroid.ui.components.BackButtonTopBar
-import com.example.thingsappandroid.ui.theme.ActivityGreen
-import com.example.thingsappandroid.ui.theme.Gray100
 import com.example.thingsappandroid.ui.theme.Shapes
-import com.example.thingsappandroid.ui.theme.TextPrimary
-import com.example.thingsappandroid.ui.theme.TextSecondary
 
 @Composable
 fun AppThemeScreen(
@@ -40,10 +38,12 @@ fun AppThemeScreen(
 ) {
     val themeModeState = viewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
     val themeMode = themeModeState.value
+    val colorScheme = MaterialTheme.colorScheme
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(colorScheme.background)
             .statusBarsPadding()
     ) {
         BackButtonTopBar(title = "App Theme", onBack = onBack)
@@ -56,19 +56,22 @@ fun AppThemeScreen(
             ThemeOptionRow(
                 label = "System Default",
                 selected = themeMode == ThemeMode.System,
-                onClick = { viewModel.setThemeMode(ThemeMode.System) }
+                onClick = { viewModel.setThemeMode(ThemeMode.System) },
+                colorScheme = colorScheme
             )
             Spacer(modifier = Modifier.height(5.dp))
             ThemeOptionRow(
                 label = "Light",
                 selected = themeMode == ThemeMode.Light,
-                onClick = { viewModel.setThemeMode(ThemeMode.Light) }
+                onClick = { viewModel.setThemeMode(ThemeMode.Light) },
+                colorScheme = colorScheme
             )
             Spacer(modifier = Modifier.height(5.dp))
             ThemeOptionRow(
                 label = "Dark",
                 selected = themeMode == ThemeMode.Dark,
-                onClick = { viewModel.setThemeMode(ThemeMode.Dark) }
+                onClick = { viewModel.setThemeMode(ThemeMode.Dark) },
+                colorScheme = colorScheme
             )
         }
     }
@@ -78,14 +81,15 @@ fun AppThemeScreen(
 private fun ThemeOptionRow(
     label: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    colorScheme: ColorScheme
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = Shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Gray100),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerHighest),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
@@ -98,7 +102,7 @@ private fun ThemeOptionRow(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    color = if (selected) TextPrimary else TextSecondary
+                    color = if (selected) colorScheme.onSurface else colorScheme.onSurfaceVariant
                 ),
                 modifier = Modifier.weight(1f)
             )
@@ -106,8 +110,8 @@ private fun ThemeOptionRow(
                 selected = selected,
                 onClick = onClick,
                 colors = RadioButtonDefaults.colors(
-                    selectedColor = ActivityGreen,
-                    unselectedColor = TextSecondary
+                    selectedColor = colorScheme.primary,
+                    unselectedColor = colorScheme.onSurfaceVariant
                 )
             )
         }

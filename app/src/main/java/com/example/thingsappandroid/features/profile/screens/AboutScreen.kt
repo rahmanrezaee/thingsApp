@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +22,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,11 +37,7 @@ import com.example.thingsappandroid.BuildConfig
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.ui.components.BackButtonTopBar
 import com.example.thingsappandroid.features.profile.components.ProfileListItem
-import com.example.thingsappandroid.ui.theme.Gray100
-import com.example.thingsappandroid.ui.theme.Gray500
 import com.example.thingsappandroid.ui.theme.Shapes
-import com.example.thingsappandroid.ui.theme.TextPrimary
-import com.example.thingsappandroid.ui.theme.TextSecondary
 
 private const val PRIVACY_POLICY_URL = "https://example.com/privacy"
 private const val TERMS_URL = "https://example.com/terms"
@@ -66,8 +64,8 @@ fun AboutScreen(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background) .statusBarsPadding()
     ) {
         BackButtonTopBar(title = "About", onBack = onBack)
         Column(
@@ -119,14 +117,14 @@ fun AboutScreen(
                 text = "Umweltify ThingsApp $version",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Copyright © 2025",
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
             Spacer(modifier = Modifier.height(32.dp))
@@ -144,7 +142,7 @@ private fun AboutIdRow(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
         )
@@ -152,23 +150,25 @@ private fun AboutIdRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Gray100, Shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest, Shapes.medium)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium
                 ),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             IconButton(onClick = onCopy, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = "Copy",
-                    tint = Gray500
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

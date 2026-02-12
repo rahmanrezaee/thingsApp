@@ -21,6 +21,7 @@ val GreenFiGradientEnd = Color(0xFFD3FF33)
 // Grays
 val Gray900 = Color(0xFF1E1E1E)
 val Gray800 = Color(0xFF262626)
+val Gray700 = Color(0xFF404040)
 val Gray600 = Color(0xFF525252)
 val Gray500 = Color(0xFF737373)
 val Gray400 = Color(0xFFA3A3A3)

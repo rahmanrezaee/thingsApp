@@ -29,9 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.features.profile.components.ProfileListItem
 import com.example.thingsappandroid.features.profile.components.ProfileSectionHeader
-import com.example.thingsappandroid.ui.theme.Gray500
-import com.example.thingsappandroid.ui.theme.TextPrimary
-import com.example.thingsappandroid.ui.theme.TextSecondary
 
 @Composable
 fun ProfileScreen(
@@ -45,6 +42,7 @@ fun ProfileScreen(
 ) {
     val displayEmail = userEmail?.takeIf { it.isNotBlank() } ?: "No email"
     val scrollState = rememberScrollState()
+    val colorScheme = MaterialTheme.colorScheme
 
     Column(
         modifier = Modifier
@@ -63,7 +61,7 @@ fun ProfileScreen(
             Icon(
                 imageVector = Icons.Default.Smartphone,
                 contentDescription = null,
-                tint = Gray500,
+                tint = colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(40.dp)
             )
             Column {
@@ -71,14 +69,14 @@ fun ProfileScreen(
                     text = deviceName.ifBlank { "—" },
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = colorScheme.onSurface,
                         fontSize = 18.sp
                     )
                 )
                 Text(
                     text = displayEmail,
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         fontSize = 14.sp
                     )
                 )

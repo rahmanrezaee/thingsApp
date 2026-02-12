@@ -69,6 +69,7 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
+    implementation(libs.material)
 
     implementation(libs.androidx.compose.material.icons.extended)
     
@@ -92,6 +93,8 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+
     
     // Sentry
     implementation(libs.sentry.android)

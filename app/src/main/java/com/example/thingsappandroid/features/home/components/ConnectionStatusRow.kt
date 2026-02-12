@@ -25,6 +25,7 @@ import com.example.thingsappandroid.ui.theme.*
 fun ConnectionStatusRow(
     carbonIntensity: Int = 96
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -57,7 +58,7 @@ fun ConnectionStatusRow(
                 text = "Green Fi Station\nConnected",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    color = Gray800,
+                    color = colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
             )
@@ -98,7 +99,7 @@ fun ConnectionStatusRow(
                 text = "Low ($carbonIntensity gCO₂e/kWh)",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    color = Gray800,
+                    color = colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
             )

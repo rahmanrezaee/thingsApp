@@ -35,7 +35,7 @@ fun DeviceCarbonBatteryBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = BackgroundWhite,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -43,7 +43,7 @@ fun DeviceCarbonBatteryBottomSheet(
                     .width(40.dp)
                     .height(4.dp)
                     .background(
-                        color = Gray300,
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(2.dp)
                     )
             )
@@ -63,7 +63,7 @@ fun DeviceCarbonBatteryBottomSheet(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -76,7 +76,7 @@ fun DeviceCarbonBatteryBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -106,7 +106,7 @@ fun DeviceCarbonBatteryBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -115,7 +115,9 @@ fun DeviceCarbonBatteryBottomSheet(
             OutlinedButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
             ) {
                 Text(
                     text = "Close",
@@ -153,7 +155,7 @@ private fun CarbonBudgetRow(
                 text = label,
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isHighlighted) TextPrimary else TextSecondary
+                    color = if (isHighlighted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
             Text(
@@ -161,7 +163,7 @@ private fun CarbonBudgetRow(
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
         }

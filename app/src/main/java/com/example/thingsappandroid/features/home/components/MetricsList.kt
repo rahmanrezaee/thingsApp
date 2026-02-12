@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ElectricalServices
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ fun MetricsList(
     onAvoidedEmissionsClick: (() -> Unit)? = null,
     onCarbonIntensityClick: (() -> Unit)? = null
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -38,21 +40,24 @@ fun MetricsList(
             icon = Icons.Rounded.Bolt,
             label = "Electricity Consumption",
             value = String.format("%.2f kWh", consumptionKwh),
-            onClick = onElectricityConsumptionClick
+            onClick = onElectricityConsumptionClick,
+            colorScheme = colorScheme
         )
-        HorizontalDivider(color = Gray100, thickness = 1.dp)
+        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
         MetricItem(
             icon = Icons.Rounded.Public,
             label = "Avoided Carbon Emissions",
             value = String.format("%.2f gCO₂e", avoidedEmissions),
-            onClick = onAvoidedEmissionsClick
+            onClick = onAvoidedEmissionsClick,
+            colorScheme = colorScheme
         )
-        HorizontalDivider(color = Gray100, thickness = 1.dp)
+        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
         MetricItem(
             icon = Icons.Rounded.ElectricalServices,
             label = "Current Carbon Intensity",
             value = "$carbonIntensity gCO₂e/kWh",
-            onClick = onCarbonIntensityClick
+            onClick = onCarbonIntensityClick,
+            colorScheme = colorScheme
         )
     }
 }
@@ -62,7 +67,8 @@ fun MetricItem(
     icon: ImageVector,
     label: String,
     value: String,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme
 ) {
     val modifier = if (onClick != null) Modifier.fillMaxWidth().clickable(onClick = onClick) else Modifier.fillMaxWidth()
     Row(
@@ -77,13 +83,13 @@ fun MetricItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Gray500,
+                tint = colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Gray600,
+                    color = colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
             )
@@ -91,7 +97,7 @@ fun MetricItem(
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
-                color = Gray800,
+                color = colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
         )

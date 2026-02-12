@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -47,8 +48,6 @@ import androidx.compose.ui.unit.dp
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.SecondaryGreen
-import com.example.thingsappandroid.ui.theme.TextPrimary
-import com.example.thingsappandroid.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
 data class OnboardingPage(
@@ -82,9 +81,10 @@ fun OnboardingScreen(
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
     var isTermsAccepted by remember { mutableStateOf(false) }
+    val colorScheme = MaterialTheme.colorScheme
 
     Scaffold(
-        containerColor = Color.White,
+        containerColor = colorScheme.background,
         bottomBar = {
             Box(
                 modifier = Modifier
@@ -106,7 +106,7 @@ fun OnboardingScreen(
                             Text(
                                 text = stringResource(R.string.terms_agreement_label),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
+                                color = colorScheme.onSurfaceVariant
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -199,7 +199,8 @@ fun OnboardingScreen(
                 OnboardingPageContent(
                     page = pages[page],
                     pagerState = pagerState,
-                    pageCount = pages.size
+                    pageCount = pages.size,
+                    colorScheme = colorScheme
                 )
             }
         }
@@ -210,7 +211,8 @@ fun OnboardingScreen(
 fun OnboardingPageContent(
     page: OnboardingPage,
     pagerState: PagerState,
-    pageCount: Int
+    pageCount: Int,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme
 ) {
     Column(
         modifier = Modifier
@@ -244,20 +246,21 @@ fun OnboardingPageContent(
                 text = page.title,
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center,
-                color = TextPrimary
+                color = colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = page.description,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                color = TextSecondary,
+                color = colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(modifier = Modifier.height(32.dp))
             PageIndicator(
                 pagerState = pagerState,
-                pageCount = pageCount
+                pageCount = pageCount,
+                colorScheme = colorScheme
             )
         }
     }
@@ -266,14 +269,19 @@ fun OnboardingPageContent(
 @Composable
 fun PageIndicator(
     pagerState: PagerState,
-    pageCount: Int
+    pageCount: Int,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme
 ) {
     Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(pageCount) { iteration ->
-            val color = if (pagerState.currentPage == iteration) PrimaryGreen else SecondaryGreen
+            val color = if (pagerState.currentPage == iteration) {
+                PrimaryGreen
+            } else {
+                colorScheme.surfaceContainerHighest
+            }
             Box(
                 modifier = Modifier
                     .padding(horizontal = 4.dp)

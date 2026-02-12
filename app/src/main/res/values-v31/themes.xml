@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Android 12+ native splash configuration (empty screen). -->
+    <style name="Theme.ThingsAppAndroid.Launcher" parent="Theme.ThingsAppAndroid">
+        <!-- Solid background color for the system splash screen. -->
+        <item name="android:windowSplashScreenBackground">@android:color/black</item>
+        <!-- Use a fully transparent drawable as the splash icon so nothing is visible. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/empty_splash</item>
+        <!-- No branding image. -->
+        <item name="android:windowSplashScreenBrandingImage">@null</item>
+    </style>
+
+</resources>
+

@@ -1,5 +1,6 @@
 package com.example.thingsappandroid.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.thingsappandroid.ui.theme.TextPrimary
+import com.example.thingsappandroid.ui.theme.Gray900
 
 /**
  * Top app bar with back arrow and centered title. Use on sub-pages (App Theme, About).
@@ -26,23 +27,26 @@ fun BackButtonTopBar(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(colorScheme.background)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back"
+                contentDescription = "Back",
+                tint = colorScheme.onSurface
             )
         }
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = colorScheme.onSurface
             ),
             modifier = Modifier
                 .weight(1f)

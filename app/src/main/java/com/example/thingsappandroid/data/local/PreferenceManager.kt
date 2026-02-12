@@ -25,12 +25,18 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getString("device_id", null)
     }
 
+    /** Default is "system" so the app follows device light/dark mode on first open. */
     fun getThemeMode(): String {
-        return sharedPreferences.getString("theme_mode", "system") ?: "system"
+        return sharedPreferences.getString("theme_mode", "system")?.takeIf { it.isNotBlank() } ?: "system"
     }
 
     fun setThemeMode(mode: String) {
-        sharedPreferences.edit().putString("theme_mode", mode).apply()
+        val value = when (mode.trim().lowercase()) {
+            "light" -> "light"
+            "dark" -> "dark"
+            else -> "system"
+        }
+        sharedPreferences.edit().putString("theme_mode", value).apply()
     }
 
     /** True when device has a station from getDeviceInfo (StationInfo). Used by BatteryService to avoid showing Station Code notification when already connected. */

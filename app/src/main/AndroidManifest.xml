@@ -31,9 +31,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ThingsAppAndroid">
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.ThingsAppAndroid">
+        android:name=".MainActivity"
+        android:exported="true"
+        android:theme="@style/Theme.ThingsAppAndroid.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <!-- Custom action for station code notification -->

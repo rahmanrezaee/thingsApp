@@ -18,7 +18,7 @@ object BatteryServiceBroadcastHandler {
 
     fun createReceiver(
         onDeviceInfoUpdated: () -> Unit,
-        onForNewDeviceCallClimateStatus: () -> Unit,
+        onForNewDeviceCallClimateStatus: (Intent?) -> Unit,
         onRequestGetDeviceInfo: () -> Unit,
         onBatteryIntent: (Intent) -> Unit,
         onConnectivityAction: (Intent?) -> Unit
@@ -28,7 +28,7 @@ object BatteryServiceBroadcastHandler {
             val receivedIntent: Intent? = intent
             when (action) {
                 BatteryServiceActions.DEVICEINFO_UPDATED -> onDeviceInfoUpdated()
-                BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS -> onForNewDeviceCallClimateStatus()
+                BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS -> onForNewDeviceCallClimateStatus(intent)
                 BatteryServiceActions.REQUEST_GET_DEVICE_INFO -> onRequestGetDeviceInfo()
                 Intent.ACTION_BATTERY_CHANGED, Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> receivedIntent?.let { onBatteryIntent(it) }
                 WifiManager.NETWORK_STATE_CHANGED_ACTION, WifiManager.WIFI_STATE_CHANGED_ACTION, ConnectivityManager.CONNECTIVITY_ACTION,

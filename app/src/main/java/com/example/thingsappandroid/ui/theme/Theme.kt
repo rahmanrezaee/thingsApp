@@ -1,7 +1,9 @@
 package com.example.thingsappandroid.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -22,25 +24,47 @@ private val LightColorScheme = lightColorScheme(
     error = ErrorRed
 )
 
+private val DarkColorScheme = darkColorScheme(
+    primary = PrimaryGreen,
+    onPrimary = Color.White,
+    secondary = SecondaryGreen,
+    onSecondary = PrimaryGreen,
+    background = Gray900,
+    surface = Gray900,
+    onBackground = Color.White,
+    onSurface = Color.White,
+    onSurfaceVariant = Gray400,
+    surfaceContainerHighest = Gray800,
+    outline = Gray600,
+    outlineVariant = Gray700,
+    error = ErrorRed
+)
+
 @Composable
 fun ThingsAppAndroidTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Status bar background matches app bar (surface white).
-            window.statusBarColor = BackgroundWhite.toArgb()
+            // Force system bars to follow our theme:
+            // - darkTheme: solid dark bars
+            // - lightTheme: surface color bars
+            val barColor = if (darkTheme) Color.Black.toArgb() else colorScheme.surface.toArgb()
+            window.statusBarColor = barColor
+            window.navigationBarColor = barColor
             WindowCompat.getInsetsController(window, view).apply {
-                // Light theme: dark status bar icons on light background.
-                isAppearanceLightStatusBars = true
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
             }
         }
     }
 
     MaterialTheme(
-        colorScheme = LightColorScheme,
+        colorScheme = colorScheme,
         typography = Typography,
         content = content
     )

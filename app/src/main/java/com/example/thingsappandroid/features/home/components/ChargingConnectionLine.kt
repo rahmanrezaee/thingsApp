@@ -17,9 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
 import com.example.thingsappandroid.ui.theme.BatteryYellow
-import com.example.thingsappandroid.ui.theme.Gray300
-import com.example.thingsappandroid.ui.theme.Gray900
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable
@@ -28,8 +27,8 @@ fun ChargingConnectionLine(
     height: Dp = 48.dp,
     isGreenStation: Boolean = false
 ) {
-    // Orange dot for green station, black dot for not green
-    val dotColor = if (isGreenStation) BatteryYellow else Gray900
+    val colorScheme = MaterialTheme.colorScheme
+    val dotColor = if (isGreenStation) BatteryYellow else colorScheme.surfaceContainerHighest
     val infiniteTransition = rememberInfiniteTransition(label = "Electricity")
 
     val progress by infiniteTransition.animateFloat(
@@ -56,7 +55,7 @@ fun ChargingConnectionLine(
         // Static connection line
         Canvas(modifier = Modifier.fillMaxHeight().width(2.dp)) {
             drawLine(
-                color = Gray300,
+                color = colorScheme.outline,
                 start = Offset(size.width / 2, 0f),
                 end = Offset(size.width / 2, size.height + 10),
                 strokeWidth = 3.dp.toPx()

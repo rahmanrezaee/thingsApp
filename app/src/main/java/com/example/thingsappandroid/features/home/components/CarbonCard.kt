@@ -18,12 +18,13 @@ fun CarbonCard(
     currentUsage: Float = 25.43f,
     totalCapacity: Float = 500f
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = modifier
             .height(163.dp)
             .zIndex(1f),
         shape = Shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Gray100),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerHighest),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -35,15 +36,18 @@ fun CarbonCard(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "Carbon",
-                        style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
+                        style = MaterialTheme.typography.titleMedium.copy(color = colorScheme.onSurface)
                     )
                     Text(
                         text = "${totalCapacity.toInt()} gCO₂e",
-                        style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
+                        style = MaterialTheme.typography.labelSmall.copy(color = colorScheme.onSurfaceVariant)
                     )
                 }
 
                 // Battery icon + value text centered in remaining space
+                val isDark = colorScheme.background == Gray900
+                val liquidStart = if (isDark) Gray300 else Gray600
+                val liquidEnd = if (isDark) Gray100 else Gray800
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -56,8 +60,8 @@ fun CarbonCard(
                             .height(70.dp),
                         level = (currentUsage / totalCapacity).coerceIn(0f, 1f),
                         isAnimating = false,
-                        colorStart = Gray600,
-                        colorEnd = Gray800
+                        colorStart = liquidStart,
+                        colorEnd = liquidEnd
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -67,11 +71,11 @@ fun CarbonCard(
                     ) {
                         Text(
                             text = String.format("%.2f", currentUsage),
-                            style = MaterialTheme.typography.titleLarge.copy(color = Gray800)
+                            style = MaterialTheme.typography.titleLarge.copy(color = colorScheme.onSurface)
                         )
                         Text(
                             text = "gCO₂e",
-                            style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
+                            style = MaterialTheme.typography.labelSmall.copy(color = colorScheme.onSurfaceVariant)
                         )
                     }
                 }

@@ -19,12 +19,12 @@ fun BatteryCard(
     isCharging: Boolean = false,
     batteryCapacityMwh: Int? = null
 ) {
-    // Determine if we have valid battery data
+    val colorScheme = MaterialTheme.colorScheme
     val hasValidData = batteryLevel >= 0f
     Card(
         modifier = modifier.height(163.dp),
         shape = Shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Gray100),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerHighest),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -38,13 +38,13 @@ fun BatteryCard(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "Electricity",
-                        style = MaterialTheme.typography.titleMedium.copy(color = Gray800)
+                        style = MaterialTheme.typography.titleMedium.copy(color = colorScheme.onSurface)
                     )
                     Text(
                         text = batteryCapacityMwh?.let { capacity ->
                             NumberFormat.getNumberInstance(Locale.US).format(capacity) + " mWh"
                         } ?: "80,000 mWh",
-                        style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
+                        style = MaterialTheme.typography.labelSmall.copy(color = colorScheme.onSurfaceVariant)
                     )
                 }
 
@@ -73,7 +73,7 @@ fun BatteryCard(
                         Text(
                             text = if (hasValidData) "${(batteryLevel * 100).toInt()}%" else "--",
                             style = MaterialTheme.typography.titleLarge.copy(
-                                color = if (hasValidData) Gray800 else Gray400
+                                color = if (hasValidData) colorScheme.onSurface else colorScheme.onSurfaceVariant
                             )
                         )
                         Text(
@@ -84,9 +84,9 @@ fun BatteryCard(
                             },
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = when {
-                                    !hasValidData -> Gray400
+                                    !hasValidData -> colorScheme.onSurfaceVariant
                                     isCharging -> BatteryYellow
-                                    else -> Gray500
+                                    else -> colorScheme.onSurfaceVariant
                                 },
                                 fontWeight = FontWeight.SemiBold
                             )

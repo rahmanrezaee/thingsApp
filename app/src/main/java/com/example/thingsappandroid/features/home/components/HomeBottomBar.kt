@@ -26,11 +26,12 @@ fun HomeBottomBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Column {
-        HorizontalDivider(color = Gray100, thickness = 1.dp)
+        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
         NavigationBar(
-            containerColor = Color.White,
-            contentColor = Gray400,
+            containerColor = colorScheme.surface,
+            contentColor = colorScheme.onSurfaceVariant,
             tonalElevation = 0.dp,
         ) {
             val items = listOf(
@@ -51,7 +52,7 @@ fun HomeBottomBar(
                         Icon(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
-                            tint = if (isSelected) ActivityGreen else Gray400,
+                            tint = if (isSelected) ActivityGreen else colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     },
@@ -68,8 +69,8 @@ fun HomeBottomBar(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = ActivityGreen,
                         selectedTextColor = ActivityGreen,
-                        unselectedIconColor = Gray400,
-                        unselectedTextColor = Gray400,
+                        unselectedIconColor = colorScheme.onSurfaceVariant,
+                        unselectedTextColor = colorScheme.onSurfaceVariant,
                         indicatorColor = Color.Transparent
                     )
                 )

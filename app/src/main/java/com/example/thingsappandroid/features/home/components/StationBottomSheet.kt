@@ -27,7 +27,7 @@ fun StationBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = BackgroundWhite,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -35,7 +35,7 @@ fun StationBottomSheet(
                     .width(40.dp)
                     .height(4.dp)
                     .background(
-                        color = Gray300,
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(2.dp)
                     )
             )
@@ -55,7 +55,7 @@ fun StationBottomSheet(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -68,7 +68,7 @@ fun StationBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -80,7 +80,7 @@ fun StationBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -108,7 +108,7 @@ fun StationBottomSheet(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }

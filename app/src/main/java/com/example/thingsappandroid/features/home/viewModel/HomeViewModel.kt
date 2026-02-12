@@ -208,7 +208,7 @@ class HomeViewModel @Inject constructor(
                 // User manually requested refresh (pull-to-refresh or retry) – ask BatteryService to run getDeviceInfo
                 Log.d(HOME_LOG, "📥 Manual refresh requested")
                 _state.update { it.copy(isLoading = true, error = null) }
-                sendRequestGetDeviceInfo(null)
+                sendRequestGetDeviceInfo()
             }
             ActivityIntent.CheckLocationStatus -> {
                 checkLocationAndLoadDeviceInfo()
@@ -431,14 +431,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Asks BatteryService to run getDeviceInfo. HomeViewModel listens for DEVICEINFO_UPDATED and then loads from cache.
-     * @param stationCode optional station code (e.g. after setStation); if null, BatteryService uses PreferenceManager.
-     */
-    private fun sendRequestGetDeviceInfo(stationCode: String?) {
+
+    private fun sendRequestGetDeviceInfo() {
         Intent(BatteryServiceActions.REQUEST_GET_DEVICE_INFO).apply {
             setPackage(getApplication<Application>().packageName)
-            stationCode?.let { putExtra(BatteryServiceActions.EXTRA_STATION_CODE, it) }
         }.also { getApplication<Application>().sendBroadcast(it) }
     }
 
@@ -635,6 +631,7 @@ class HomeViewModel @Inject constructor(
                     if (_state.value.isCharging) {
                         Intent(BatteryServiceActions.FOR_NEW_DEVICE_CALL_CLIMATE_STATUS).apply {
                             setPackage(getApplication<Application>().packageName)
+                            putExtra(BatteryServiceActions.EXTRA_STATION_CODE, stationCode)
                         }.also { getApplication<Application>().sendBroadcast(it) }
                     }
                 } else {

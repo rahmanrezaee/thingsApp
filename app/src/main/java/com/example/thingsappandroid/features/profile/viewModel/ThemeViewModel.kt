@@ -28,9 +28,10 @@ class ThemeViewModel @Inject constructor(
         }
     }
 
-    private fun themeModeFromString(s: String): ThemeMode = when (s.lowercase()) {
+    private fun themeModeFromString(s: String): ThemeMode = when (s.trim().lowercase()) {
         "light" -> ThemeMode.Light
         "dark" -> ThemeMode.Dark
-        else -> ThemeMode.System
+        else -> ThemeMode.System  // default: follow system (device) light/dark mode
     }
 }
+

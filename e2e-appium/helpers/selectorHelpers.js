@@ -45,6 +45,11 @@ function byCheckable(checked = false) {
   return `${ANDROID_SELECTOR}=new UiSelector().checkable(true).checked(${checked})`;
 }
 
+/** Editable text field (e.g. station code input). */
+function byEditText() {
+  return `${ANDROID_SELECTOR}=new UiSelector().className("android.widget.EditText")`;
+}
+
 module.exports = {
   byTextContains,
   byButtonTextContains,
@@ -53,5 +58,6 @@ module.exports = {
   byPermissionAllowButtonLegacy,
   byResourceId,
   byCheckable,
+  byEditText,
   ANDROID_SELECTOR,
 };

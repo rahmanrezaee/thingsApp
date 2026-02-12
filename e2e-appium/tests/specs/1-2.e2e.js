@@ -1,12 +1,19 @@
 /**
  * Scenario 1.2 – First Launch (Online + Charging)
  *
- * Purpose:
- * Tests the first-time app launch flow when the device is online AND charging.
- * Verifies SetClimateStatus called, charging animation, Station Code notification
- * (if ClimateStatus ≠ 5,6,7,9).
+ * Expected Flow (per spec A):
+ *   A.1  Splash screen
+ *   A.2  Onboarding/wizard pages
+ *   A.3  Location permission
+ *   A.4  Splash loading screen (second)
+ *   A.5  Online + Charging:
+ *        Login → Register(if new) → SetClimateStatus(DeviceId,WiFi,Location,StationCode)
+ *        → If ClimateStatus ≠ 5,6,7,9 → Station Code notification
+ *        → GetDeviceInfo → Store
+ *   A.7  Update home page (charging animation)
+ *   A.8  Update notification content
  *
- * Run: npm run e2e 1.2  (or npm run e2e for all)
+ * Run: npm run e2e 1.2
  */
 
 const assert = require('node:assert');
@@ -19,102 +26,121 @@ const APP_PACKAGE = adb.PACKAGE;
 const GREEN_CLIMATE_STATUSES = [5, 6, 7, 9];
 
 describe('Scenario 1.2 – First Launch (Online + Charging)', function () {
-  let deviceId;
-  let logger;
-  /** @type {import('child_process').ChildProcess | null} */
-  let liveApiLogProcess = null;
+  this.timeout(120000);
+  let deviceId, logger, liveApiLogProcess = null;
 
   before(async function () {
-    const resources = setupTest(SCENARIO_ID, {
-      battery: 'charging',
-      network: true,
-      scenarioName: 'First Launch (Online + Charging)'
-    });
-    deviceId = resources.deviceId;
-    logger = resources.logger;
-    liveApiLogProcess = resources.liveApiLogProcess;
-    browser.e2eScenarioId = SCENARIO_ID;
-    browser.e2ePreconditions = { battery: 'charging', network: true, scenarioName: 'First Launch (Online + Charging)' };
-    browser.e2eLogger = logger;
-    browser.e2eDeviceId = deviceId;
-    await browser.pause(1500);
+    try {
+      const r = setupTest(SCENARIO_ID, { battery: 'charging', network: true, scenarioName: 'First Launch (Online + Charging)' });
+      deviceId = r.deviceId; logger = r.logger; liveApiLogProcess = r.liveApiLogProcess;
+      browser.e2eScenarioId = SCENARIO_ID;
+      browser.e2ePreconditions = { battery: 'charging', network: true };
+      browser.e2eLogger = logger; browser.e2eDeviceId = deviceId;
+      await browser.pause(1500);
+    } catch (err) { console.error(`[${SCENARIO_ID}] ❌ Setup failed: ${err.message}`); throw err; }
   });
 
   after(async function () {
-    await teardownTest(SCENARIO_ID, { deviceId, logger, liveApiLogProcess });
+    try { await teardownTest(SCENARIO_ID, { deviceId, logger, liveApiLogProcess }); }
+    catch (err) { console.error(`[${SCENARIO_ID}] ⚠️ Teardown error: ${err.message}`); }
   });
 
-  it('Step 1: App open, Splash and background start', async function () {
-    await UIHelper.waitForSplashAndBackground(SCENARIO_ID);
-    logger.logAppLogs('After splash - Splash & background');
-    logger.captureNotificationEvents('After splash');
-    await UIHelper.handleOnboarding(SCENARIO_ID);
+  // ── A.1 ──────────────────────────────────────────────────────────
+  it('A.1: First splash screen displayed', async function () {
+    const splash = await UIHelper.waitForSplashScreen(SCENARIO_ID);
+    assert.ok(splash, 'First splash screen should appear on app open');
+    logger.logAppLogs('After first splash');
   });
 
-  it('Step 2–4: Terms, Get Started', async function () {
-    const termsAccepted = await UIHelper.acceptTerms(SCENARIO_ID);
-    assert.ok(termsAccepted, 'Terms acceptance should succeed');
+  // ── A.2 ──────────────────────────────────────────────────────────
+  it('A.2: Onboarding wizard, terms, Get Started', async function () {
+    const onboarding = await UIHelper.handleOnboarding(SCENARIO_ID);
+    assert.ok(onboarding, 'Onboarding pages should be shown on first launch');
 
-    const getStartedClicked = await UIHelper.clickGetStarted(SCENARIO_ID);
-    assert.ok(getStartedClicked, 'Get Started button should be clickable');
+    const terms = await UIHelper.acceptTerms(SCENARIO_ID);
+    assert.ok(terms, 'Terms acceptance should succeed');
 
-    logger.logAppLogs('After Get Started - Auth Flow');
-    logger.captureNotificationEvents('After Get Started');
+    const started = await UIHelper.clickGetStarted(SCENARIO_ID);
+    assert.ok(started, 'Get Started button should be clickable');
+    logger.logAppLogs('After onboarding');
   });
 
-  it('Step 5: Location permission', async function () {
-    await UIHelper.handleLocationPermission(SCENARIO_ID, deviceId);
+  // ── A.3 ──────────────────────────────────────────────────────────
+  it('A.3: Location permission page shown and granted', async function () {
+    const perm = await UIHelper.handleLocationPermission(SCENARIO_ID, deviceId);
+    assert.ok(perm, 'Location permission page should appear and be granted');
     logger.logAppLogs('After permission');
-    logger.captureNotificationEvents('After permission');
   });
 
-  it('Step 5b: Wait for background (Login/Register, getDeviceInfo, SetClimateStatus)', async function () {
+  // ── A.4 ──────────────────────────────────────────────────────────
+  it('A.4: Second splash (loading) shown while APIs execute', async function () {
+    const loading = await UIHelper.waitForLoadingSplash(SCENARIO_ID);
+    assert.ok(loading, 'Second splash/loading screen should appear after permission');
+  });
+
+  // ── A.5 (Online + Charging) ─────────────────────────────────────
+  it('A.5: Login + SetClimateStatus + GetDeviceInfo called; data stored', async function () {
     await UIHelper.waitForBackgroundProcesses(SCENARIO_ID, 5000);
-    logger.logAppLogs('After background');
-    logger.captureNotificationEvents('Background APIs');
+    logger.logAppLogs('After APIs');
 
-    const setClimateStatusCalled = UIHelper.verifySetClimateStatusCalled(SCENARIO_ID, deviceId);
-    assert.ok(setClimateStatusCalled, 'SetClimateStatus API should be called when charging');
+    const login = UIHelper.verifyLoginCalled(SCENARIO_ID, deviceId);
+    assert.ok(login, 'Login API should be called with DeviceId');
+
+    // SetClimateStatus MUST be called (charging)
+    const climate = UIHelper.verifySetClimateStatusCalled(SCENARIO_ID, deviceId);
+    assert.ok(climate, 'SetClimateStatus must be called (device is charging)');
+
+    const info = UIHelper.verifyGetDeviceInfoCalled(SCENARIO_ID, deviceId);
+    assert.ok(info, 'GetDeviceInfo should be called with DeviceId, WiFiAddress, Location');
+
+    const stored = UIHelper.verifyDataStoredLocally(SCENARIO_ID, deviceId);
+    assert.ok(stored, 'Data should be stored in local database');
   });
 
-  it('Step 5c: Verify permission screen gone before Home', async function () {
-    await UIHelper.verifyPermissionScreenGone(SCENARIO_ID, deviceId);
-  });
-
-  it('Step 6: Home screen with data', async function () {
-    const homeFound = await UIHelper.waitForHomeScreen(SCENARIO_ID, 2);
-    assert.ok(homeFound, 'Home screen should be visible with navigation indicators');
-
-    logger.logAppLogs('Home Screen Loaded');
-    logger.captureNotificationEvents('Home Screen');
-  });
-
-  it('Step 7: Verify charging animation/text visible', async function () {
-    const chargingVisible = await UIHelper.verifyChargingAnimation(SCENARIO_ID);
-    assert.ok(chargingVisible, 'Charging animation/text should be visible when device is charging');
-  });
-
-  it('Step 8: Notifications (Station Code when charging and ClimateStatus not green)', async function () {
-    logger.captureNotificationEvents('Before shade');
-    const notifications = await UIHelper.checkActiveNotifications(SCENARIO_ID, APP_PACKAGE);
-    logger.captureNotificationEvents('After shade');
-
+  // ── A.5 continued: Station Code notification logic ──────────────
+  it('A.5b: Station Code notification if ClimateStatus ≠ 5,6,7,9', async function () {
+    const notifs = await UIHelper.checkActiveNotifications(SCENARIO_ID, APP_PACKAGE);
     const climateStatus = UIHelper.extractClimateStatus(SCENARIO_ID, deviceId);
     const isGreen = climateStatus !== null && GREEN_CLIMATE_STATUSES.includes(climateStatus);
 
-    if (climateStatus !== null) {
-      console.log(`[${SCENARIO_ID}]    📊 Climate Status: ${climateStatus} (${isGreen ? 'Green' : 'Not Green'})`);
-    }
+    console.log(`[${SCENARIO_ID}]    📊 ClimateStatus: ${climateStatus} (${isGreen ? 'Green ✅' : 'Not Green ⚠️'})`);
 
     const shouldHaveStationCode = climateStatus === null || !isGreen;
-    const stationCodeValid = UIHelper.verifyStationCodeNotification(SCENARIO_ID, notifications, shouldHaveStationCode);
+    const valid = UIHelper.verifyStationCodeNotification(SCENARIO_ID, notifs, shouldHaveStationCode);
 
     if (shouldHaveStationCode) {
-      assert.ok(stationCodeValid, `Station Code notification should be present (ClimateStatus=${climateStatus} is not green)`);
+      assert.ok(valid, `Station Code notification must be present (ClimateStatus=${climateStatus} ≠ 5,6,7,9)`);
+      const text = UIHelper.extractNotificationText(SCENARIO_ID, notifs, 'station_code');
+      assert.ok(text && text.length > 0, 'Notification should prompt user to enter Station Code');
     } else {
-      assert.ok(stationCodeValid, `Station Code notification should NOT be present (ClimateStatus=${climateStatus} is green)`);
+      assert.ok(valid, `Station Code notification must NOT be present (ClimateStatus=${climateStatus} is green)`);
     }
+  });
 
-    UIHelper.verifyForegroundServiceNotification(SCENARIO_ID, notifications);
+  // ── A.7 ──────────────────────────────────────────────────────────
+  it('A.7: Home page updated with charging animation', async function () {
+    const home = await UIHelper.waitForHomeScreen(SCENARIO_ID, 2);
+    assert.ok(home, 'Home screen should be visible');
+
+    const data = await UIHelper.verifyHomeHasApiData(SCENARIO_ID);
+    assert.ok(data, 'Home should display API data');
+
+    const charging = await UIHelper.verifyChargingAnimation(SCENARIO_ID);
+    assert.ok(charging, 'Charging animation/text must be visible');
+
+    const animations = await UIHelper.verifyHomeAnimationsUpdated(SCENARIO_ID);
+    assert.ok(animations, 'Home page texts, animations, colors should be updated');
+    logger.logAppLogs('Home Screen Loaded');
+  });
+
+  // ── A.8 ──────────────────────────────────────────────────────────
+  it('A.8: Notification content updated', async function () {
+    const notifs = await UIHelper.checkActiveNotifications(SCENARIO_ID, APP_PACKAGE);
+
+    const fg = UIHelper.verifyForegroundServiceNotification(SCENARIO_ID, notifs);
+    assert.ok(fg, 'Foreground service notification should be active');
+
+    const updated = UIHelper.verifyClimateNotificationUpdated(SCENARIO_ID, notifs);
+    assert.ok(updated, 'Climate notification content should be updated');
   });
 });

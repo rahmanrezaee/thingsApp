@@ -2,20 +2,31 @@ package com.example.thingsappandroid
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
+import com.example.thingsappandroid.ui.theme.ThemeMode
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import com.example.thingsappandroid.data.local.PreferenceManager
@@ -70,14 +81,12 @@ class MainActivity : ComponentActivity() {
             return true
         }
 
-        // If location not granted, let the user know they need to grant it
         Toast.makeText(
             this,
             "Location permission is required. Please grant it in the app.",
             Toast.LENGTH_LONG
         ).show()
 
-        // Clear the action so it doesn't re-trigger on config changes
         intent.action = null
 
         return true
@@ -93,13 +102,12 @@ class MainActivity : ComponentActivity() {
                 Log.d("MainActivity", "BatteryService already running, skipping start")
                 return
             }
-            
-            // Check if background location is granted - REQUIRED
+
             if (!PermissionUtils.hasBackgroundLocationPermission(this)) {
                 Log.w("MainActivity", "Background location not granted, cannot start service")
                 return
             }
-            // For Android 14+ (API 34), check if notification permission is granted before starting foreground service
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val notificationGranted = ContextCompat.checkSelfPermission(
                     this,
@@ -200,10 +208,11 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
+
+        setTheme(R.style.Theme_ThingsAppAndroid)
         super.onCreate(savedInstanceState)
         hasRequiredPermissions = PermissionUtils.hasRequiredPermissions(this)
 
-        // Start service if all permissions are granted (including background location)
         if (hasRequiredPermissions && PermissionUtils.hasBackgroundLocationPermission(this)) {
             Log.d("MainActivity", "All permissions granted, starting service")
             startChargingDetectionService()
@@ -211,13 +220,31 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "Waiting for permissions (hasRequired: $hasRequiredPermissions, hasBackground: ${PermissionUtils.hasBackgroundLocationPermission(this)})")
         }
 
-        // Handle intents: location permission request, station code, deep links
         handleLocationPermissionRequest(intent)
         handleDeepLink(intent)
         checkStationCodeIntent(intent)
 
         setContent {
-            ThingsAppAndroidTheme {
+            val themeViewModel: ThemeViewModel = viewModel()
+            val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
+            val darkTheme = themeMode == ThemeMode.Dark ||
+                    (themeMode == ThemeMode.System && isSystemInDarkTheme())
+
+            // Sync status bar appearance with current theme
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as Activity).window
+                    window.statusBarColor = Color.TRANSPARENT
+                    window.navigationBarColor = Color.TRANSPARENT
+                    WindowCompat.getInsetsController(window, view).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                }
+            }
+
+            ThingsAppAndroidTheme(darkTheme = darkTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavigation()
                     GlobalMessageHost()
@@ -229,33 +256,26 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         preferenceManager.setAppInForeground(true)
-        // Re-check permissions in case user changed them in Settings.
-        // Use lastKnown* from previous run so we detect transition when user returns from Settings.
         val previousPermissions = hasRequiredPermissions
         val previousBackgroundLocation = lastKnownBackgroundLocation
         hasRequiredPermissions = PermissionUtils.hasRequiredPermissions(this)
         val currentBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(this)
         lastKnownBackgroundLocation = currentBackgroundLocation
 
-        // Log permission status for debugging
         Log.d("MainActivity", "onResume - Required permissions: $hasRequiredPermissions")
         Log.d("MainActivity", "onResume - Background location: $currentBackgroundLocation")
-        
-        // If all permissions just granted (including background location), start service
+
         if (hasRequiredPermissions && currentBackgroundLocation && (!previousPermissions || !previousBackgroundLocation)) {
             Log.d("MainActivity", "All permissions granted after returning from Settings, starting service")
             startChargingDetectionService()
         }
-        
-        // Only refresh if user just enabled location permission (returned from Settings)
-        // This handles the case where user enables location and we need to fetch device info
+
         if (!preferenceManager.isOnboardingCompleted()) {
             return
         }
-        
-        // Check if location permission state actually changed
+
         val locationJustEnabled = hasRequiredPermissions && !previousPermissions
-        
+
         if (locationJustEnabled) {
             Log.d("MainActivity", "Location permission just enabled - notifying ViewModel")
             try {
@@ -277,8 +297,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         intent?.let {
-            setIntent(it) // Update the activity intent so downstream checks see the latest extras
-            // Handle all possible intent types
+            setIntent(it)
             handleLocationPermissionRequest(it)
             handleDeepLink(it)
             checkStationCodeIntent(it)
@@ -294,7 +313,6 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == BatteryServiceActions.OPEN_STATION_CODE ||
             intent?.getBooleanExtra("open_station_code_dialog", false) == true
         ) {
-
             Log.d("MainActivity", "STATION CODE INTENT DETECTED. Dispatching to ViewModel.")
             try {
                 val viewModel = ViewModelProvider(this)[HomeViewModel::class.java]

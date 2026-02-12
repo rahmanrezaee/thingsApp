@@ -33,7 +33,7 @@ fun GridCarbonIntensityBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = BackgroundWhite,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -41,7 +41,7 @@ fun GridCarbonIntensityBottomSheet(
                     .width(40.dp)
                     .height(4.dp)
                     .background(
-                        color = Gray300,
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(2.dp)
                     )
             )
@@ -61,7 +61,7 @@ fun GridCarbonIntensityBottomSheet(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -74,7 +74,7 @@ fun GridCarbonIntensityBottomSheet(
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 ),
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -84,7 +84,7 @@ fun GridCarbonIntensityBottomSheet(
                     text = "Current intensity: $carbonIntensity gCO₂e/kWh",
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -115,7 +115,7 @@ fun GridCarbonIntensityBottomSheet(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }

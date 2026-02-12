@@ -13,7 +13,7 @@ object BatteryServiceActions {
 
     /** Request BatteryService to run getDeviceInfo (e.g. after setStation or user refresh). Send from HomeViewModel. */
     const val REQUEST_GET_DEVICE_INFO = "com.example.thingsappandroid.REQUEST_GET_DEVICE_INFO"
-    /** Optional extra: station code to use for this getDeviceInfo request (e.g. after setStation). String. */
+    /** Optional extra: station code (e.g. for SetClimateStatus after setStation, or getDeviceInfo request). String. */
     const val EXTRA_STATION_CODE = "station_code"
 
     /** Intent action to open station code dialog (e.g. from notification tap) */

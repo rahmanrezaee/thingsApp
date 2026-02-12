@@ -18,6 +18,9 @@ import com.example.thingsappandroid.ui.theme.*
 
 @Composable
 fun HomeTopBar(deviceName: String) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme = colorScheme.background == Gray900
+    val logoRes = if (isDarkTheme) R.drawable.logo_wide_light else R.drawable.logo_wide
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -27,7 +30,7 @@ fun HomeTopBar(deviceName: String) {
     ) {
         // Logo Area
         Image(
-            painter = painterResource(id = R.drawable.logo_wide),
+            painter = painterResource(id = logoRes),
             contentDescription = "ThingsApp Logo",
             modifier = Modifier.height(26.dp),
             contentScale = ContentScale.Fit
@@ -37,7 +40,7 @@ fun HomeTopBar(deviceName: String) {
         Text(
             text = deviceName,
             style = MaterialTheme.typography.bodyMedium.copy(
-                color = Gray500,
+                color = colorScheme.onSurfaceVariant,
                 fontSize = 14.sp
             ),
             maxLines = 1,
