@@ -8,10 +8,11 @@ import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.model.SetClimateStatusRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
-import com.example.thingsappandroid.services.API_GREEN_CLIMATE_STATUSES
+import com.example.thingsappandroid.services.BatteryServiceConstants
 import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.DeviceUtils
 import com.example.thingsappandroid.util.LocationUtils
+import com.example.thingsappandroid.util.NetworkUtils
 import com.example.thingsappandroid.util.WifiUtils
 import io.sentry.Sentry
 import kotlinx.coroutines.Job
@@ -19,7 +20,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Manages climate status API calls when charging starts.
- * Caller (BatteryService) must ensure WiFi and location are available before calling.
+ * Caller (BatteryService) must ensure internet (WiFi or mobile) and location are available before calling.
+ * If WiFi: uses BSSID as wiFiAddress; if mobile only: sends null for wiFiAddress.
  * If a new request arrives while one is in progress, the old one is cancelled.
  */
 class ClimateStatusManager(private val context: Context) {
@@ -62,11 +64,13 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
-            val wifiResult = WifiUtils.getHashedWiFiBSSIDWithRetry(context, maxRetries = WIFI_MAX_RETRIES, delayMs = WIFI_RETRY_DELAY_MS)
-            if (!wifiResult.success || wifiResult.bssid == null) {
-                Log.w(TAG, "WiFi BSSID not available: ${wifiResult.errorReason}")
+            if (!NetworkUtils.isNetworkAvailable(context)) {
+                Log.w(TAG, "Skipped: no internet (WiFi or mobile)")
                 return null
             }
+
+            val wifiBssid = WifiUtils.getHashedWiFiBSSIDWithRetry(context, maxRetries = WIFI_MAX_RETRIES, delayMs = WIFI_RETRY_DELAY_MS).bssid
+            Log.d(TAG, "WiFi BSSID: ${if (wifiBssid != null) "present" else "null (mobile only)"}")
 
             val hasPermission = LocationUtils.hasLocationPermission(context)
             val isEnabled = LocationUtils.isLocationEnabled(context)
@@ -80,8 +84,8 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
-            val climateStatus = callSetClimateStatus(deviceId, wifiResult.bssid, stationCode)
-            callGetDeviceInfo(deviceId, wifiResult.bssid)
+            val climateStatus = callSetClimateStatus(deviceId, wifiBssid, stationCode)
+            callGetDeviceInfo(deviceId, wifiBssid)
             climateStatus
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}", e)
@@ -96,9 +100,9 @@ class ClimateStatusManager(private val context: Context) {
     }
 
     /**
-     * Call SetClimateStatus API with DeviceId, WiFiAddress, Location, and optional StationCode.
+     * Call SetClimateStatus API with DeviceId, Location, optional WiFiAddress (null when on mobile), optional StationCode.
      */
-    private suspend fun callSetClimateStatus(deviceId: String, wiFiAddress: String, stationCode: String? = null): Int? {
+    private suspend fun callSetClimateStatus(deviceId: String, wiFiAddress: String?, stationCode: String? = null): Int? {
         return try {
             val (lat, lng) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val request = SetClimateStatusRequest(
@@ -132,9 +136,9 @@ class ClimateStatusManager(private val context: Context) {
     }
 
     /**
-     * Call GetDeviceInfo API and save result
+     * Call GetDeviceInfo API and save result. wiFiAddress null when on mobile (no WiFi).
      */
-    private suspend fun callGetDeviceInfo(deviceId: String, wiFiAddress: String) {
+    private suspend fun callGetDeviceInfo(deviceId: String, wiFiAddress: String?) {
         try {
             val (lat, lng) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val request = DeviceInfoRequest(
@@ -162,11 +166,11 @@ class ClimateStatusManager(private val context: Context) {
                 prefManager.saveStationInfo(it)
                 prefManager.saveStationCode(it.stationCode)
             }
-            prefManager.saveLastWifiBssid(wiFiAddress)
+            wiFiAddress?.let { prefManager.saveLastWifiBssid(it) }
 
             // Dismiss station code notification if climate status is green
             val climateStatus = deviceInfo.climateStatus
-            if (climateStatus != null && climateStatus in API_GREEN_CLIMATE_STATUSES) {
+            if (climateStatus != null && climateStatus in BatteryServiceConstants.API_GREEN_CLIMATE_STATUSES) {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(STATION_CODE_NOTIFICATION_ID)
             }

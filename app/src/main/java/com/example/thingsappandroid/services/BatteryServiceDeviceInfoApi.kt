@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
+import com.example.thingsappandroid.data.model.CarbonIntensityInfo
 import com.example.thingsappandroid.data.model.DeviceInfoRequest
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.data.repository.ThingsRepository
@@ -24,7 +25,8 @@ class BatteryServiceDeviceInfoApi(
     private val preferenceManager: PreferenceManager,
     private val tokenManager: TokenManager,
     private val thingsRepository: ThingsRepository,
-    private val onUpdated: () -> Unit
+    private val onUpdated: () -> Unit,
+    private val isCharging: () -> Boolean
 ) {
     private val tag = "BatteryServiceDeviceInfoApi"
 
@@ -37,23 +39,31 @@ class BatteryServiceDeviceInfoApi(
         onUpdated()
     }
 
+    /** Grid intensity (gCO₂e) used for offline charging display. */
+    private val offlineGridIntensity = 485.0
+
     /**
-     * Offline charging: check cached carbon budget and set ClimateStatus accordingly.
-     * If remainingBudget > 0 → status 8 (GreenOnDeviceCarbonBudget).
-     * If remainingBudget <= 0 → status 4 (NotGreenOnDeviceCarbonBudget).
-     * If no cached data → create defaults (status 8, budget 500g).
+     * Offline charging: check cached carbon budget and set ClimateStatus + grid intensity accordingly.
+     * If data exists: budget > 0 → ClimateStatus 8 (1.5°C aligned), else → 4 (Not Green); grid 485.
+     * If no data → create new record with ClimateStatus 8, carbon battery 100% (500g), grid 485.
      */
     suspend fun applyOfflineChargingDeviceInfo() {
         val cached = preferenceManager.getLastDeviceInfo()
+        val carbonInfo485 = CarbonIntensityInfo(offlineGridIntensity, "Offline", null)
         if (cached != null) {
             val budget = cached.remainingBudget ?: 0.0
             val newStatus = if (budget > 0) 8 else 4
-            val updated = cached.copy(climateStatus = newStatus)
+            val updated = cached.copy(
+                climateStatus = newStatus,
+                carbonInfo = carbonInfo485
+            )
             preferenceManager.saveLastDeviceInfo(updated)
-            Log.d(tag, "applyOfflineChargingDeviceInfo: budget=$budget → climateStatus=$newStatus")
+            Log.d(tag, "applyOfflineChargingDeviceInfo: budget=$budget → climateStatus=$newStatus, grid=$offlineGridIntensity")
         } else {
-            applyDefaultDeviceInfo()
-            return
+            val defaultInfo = thingsRepository.createDefaultDeviceInfo(deviceId)
+            preferenceManager.saveLastDeviceInfo(defaultInfo)
+            preferenceManager.setHasStation(false)
+            Log.d(tag, "applyOfflineChargingDeviceInfo: no data → created default (ClimateStatus 8, carbon 100%, grid $offlineGridIntensity)")
         }
         sendDeviceInfoUpdatedBroadcast()
         onUpdated()
@@ -80,8 +90,12 @@ class BatteryServiceDeviceInfoApi(
         val wifiAddress = withContext(Dispatchers.IO) { WifiUtils.getHashedWiFiBSSID(context) }
         if (wifiAddress.isNullOrBlank()) {
             Log.d(tag, "fetchDeviceInfo: WiFi address missing - not sending request")
-            sendDeviceInfoUpdatedBroadcast()
-            onUpdated()
+            if (isCharging()) {
+                applyOfflineChargingDeviceInfo()
+            } else {
+                sendDeviceInfoUpdatedBroadcast()
+                onUpdated()
+            }
             return
         }
         val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
@@ -110,10 +124,20 @@ class BatteryServiceDeviceInfoApi(
                 Log.d(tag, "fetchDeviceInfo: success")
             } else {
                 Log.w(tag, "fetchDeviceInfo: failed code=${response?.code() ?: "timeout"}")
+                if (isCharging()) {
+                    Log.d(tag, "fetchDeviceInfo: no internet + charging → applying offline charging device info")
+                    applyOfflineChargingDeviceInfo()
+                    return
+                }
             }
         } catch (e: Exception) {
             Log.e(tag, "fetchDeviceInfo: error ${e.message}", e)
             Sentry.captureException(e)
+            if (isCharging()) {
+                Log.d(tag, "fetchDeviceInfo: error while charging → applying offline charging device info")
+                applyOfflineChargingDeviceInfo()
+                return
+            }
         }
         sendDeviceInfoUpdatedBroadcast()
         onUpdated()

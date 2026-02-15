@@ -37,4 +37,6 @@ object BatteryServiceNotificationIds {
 }
 
 /** API climate status values that indicate green energy (no station code prompt needed). */
-val API_GREEN_CLIMATE_STATUSES: List<Int> = listOf(5, 6, 7, 9)
+object BatteryServiceConstants {
+    val API_GREEN_CLIMATE_STATUSES: List<Int> = listOf(5, 6, 7, 9)
+}

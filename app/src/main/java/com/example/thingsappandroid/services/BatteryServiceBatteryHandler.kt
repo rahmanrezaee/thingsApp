@@ -1,6 +1,8 @@
 package com.example.thingsappandroid.services
 
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.BatteryManager
 
 /**
@@ -42,5 +44,15 @@ object BatteryServiceBatteryHandler {
             statusCode = status
         )
         return BatteryParseResult(state, level, voltage, wasCharging, isInitialization)
+    }
+
+    /**
+     * Gets current battery state from system (sticky ACTION_BATTERY_CHANGED).
+     * Use this when recording consumption so level/voltage are fresh every 10s.
+     */
+    fun getCurrentBatteryState(context: Context): BatteryState? {
+        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            ?: return null
+        return parseBatteryIntent(intent, null)?.state
     }
 }

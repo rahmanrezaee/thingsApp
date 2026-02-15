@@ -93,7 +93,7 @@ class BatteryServiceNotificationHandler(
                 val cachedDeviceInfo = preferenceManager.getLastDeviceInfo()
                 val apiClimateStatus = cachedDeviceInfo?.climateStatus
                 val hasStation = preferenceManager.getHasStation()
-                val isGreen = apiClimateStatus != null && apiClimateStatus in API_GREEN_CLIMATE_STATUSES
+                val isGreen = apiClimateStatus != null && apiClimateStatus in BatteryServiceConstants.API_GREEN_CLIMATE_STATUSES
                 if (hasStation || isGreen) {
                     notificationManager.cancel(ids.STATION_CODE_NOTIFICATION_ID)
                     setStationCodeShownThisSession(false)
@@ -217,7 +217,7 @@ class BatteryServiceNotificationHandler(
         if (getStationCodeShownThisSession()) return false
         if (preferenceManager.getHasStation()) return false
         val status = preferenceManager.getLastDeviceInfo()?.climateStatus
-        if (status != null && status in API_GREEN_CLIMATE_STATUSES) return false
+        if (status != null && status in BatteryServiceConstants.API_GREEN_CLIMATE_STATUSES) return false
         return true
     }
 

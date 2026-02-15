@@ -9,7 +9,9 @@ import com.example.thingsappandroid.data.local.AppDatabase
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.entity.BatteryReadingEntity
 import com.example.thingsappandroid.data.local.entity.ConsumptionEntity
+import com.example.thingsappandroid.data.model.AddDeviceConsumptionBody
 import com.example.thingsappandroid.data.model.AndroidMeasurementModel
+import com.example.thingsappandroid.data.model.Location
 import com.example.thingsappandroid.data.remote.NetworkModule
 import com.example.thingsappandroid.services.BatteryState
 import com.example.thingsappandroid.util.BatteryUtil
@@ -42,8 +44,8 @@ class ConsumptionTracker(
     companion object {
         const val CONSUMPTION_INTERVAL_MS = 10 * 1000L
         private const val BATCH_UPLOAD_INTERVAL_MS = 10 * 60 * 1000L
-        private const val INTERVAL_SEC = 10
-        private const val MIN_READINGS_TO_UPLOAD = 3
+        /** Minimum readings to send addDeviceConsumption (1 = send even for very short sessions). */
+        private const val MIN_READINGS_TO_UPLOAD = 1
     }
 
     /**
@@ -68,7 +70,8 @@ class ConsumptionTracker(
     }
 
     /**
-     * Record one raw reading (called every 10s). Inserts into Room; optionally triggers aggregate + upload if 10 min passed.
+     * Record one raw reading (called every 10s). Inserts into Room.
+     * Uses actual duration (endTime - startTime) for accurate Wh in aggregation.
      */
     @RequiresApi(Build.VERSION_CODES.O)
     suspend fun recordReading(state: BatteryState) {
@@ -77,12 +80,15 @@ class ConsumptionTracker(
             val currentNow = try {
                 batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
             } catch (e: Exception) {
+                Log.w(TAG, "recordReading: currentNow unavailable - ${e.message}")
                 Int.MIN_VALUE
             }
             val ampere = BatteryUtil.getBatteryCurrentNowInAmperes(currentNow)
             val watt = BatteryUtil.getBatteryCurrentNowInWatt(currentNow, state.voltage)
             val now = System.currentTimeMillis()
-            val endTime = now + (INTERVAL_SEC * 1000L)
+            val durationMs = CONSUMPTION_INTERVAL_MS
+            val endTime = now + durationMs
+            val whThisSlice = watt * (durationMs / 3600_000.0)
 
             val reading = BatteryReadingEntity(
                 groupId = groupId,
@@ -98,8 +104,10 @@ class ConsumptionTracker(
                 health = state.health.takeIf { it >= 0 }
             )
             readingDao.insert(reading)
-            Log.d(TAG, "Recorded reading: ${String.format("%.3f", watt)}W, ${state.level}%, group=$groupId")
-            // Upload only on plug-out (in stopTracking), not during charging
+            val batchSize = readingDao.getCountForGroup(groupId)
+            Log.d(TAG, "Recorded reading: currentNow=${currentNow}µA, V=${state.voltage}mV, level=${state.level}%, " +
+                "I=${String.format("%.3f", ampere)}A, P=${String.format("%.3f", watt)}W, " +
+                "Wh(slice)=${String.format("%.6f", whThisSlice)}, batchSize=$batchSize, group=${groupId.take(8)}…")
         } catch (e: Exception) {
             Log.e(TAG, "Error recording reading", e)
         }
@@ -113,23 +121,25 @@ class ConsumptionTracker(
         try {
             val readings = readingDao.getByGroup(groupId)
             if (readings.size < MIN_READINGS_TO_UPLOAD) {
-                Log.d(TAG, "Skipping upload - only ${readings.size} readings (need >= $MIN_READINGS_TO_UPLOAD)")
+                Log.d(TAG, "Skipping addDeviceConsumption - only ${readings.size} readings (need >= $MIN_READINGS_TO_UPLOAD)")
                 return
             }
 
             val first = readings.first()
             val last = readings.last()
-            val averageVoltage = readings.map { it.voltage / 1000.0 }.average()
-            val averageAmpere = readings.map { it.ampere }.average()
-            val totalWatts = readings.sumOf { it.watt }
-            val totalWattHours = readings.sumOf { it.watt * (INTERVAL_SEC / 3600.0) }
-
-            val batteryCapacityMah = try {
-                val chargeCounter = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                if (chargeCounter > 0) chargeCounter / 1000 else BatteryUtil.getBatteryCapacity(context)
-            } catch (e: Exception) {
-                BatteryUtil.getBatteryCapacity(context)
+            // Charging session: use absolute power/energy (some devices report charging current as negative)
+            val totalWatts = readings.map { kotlin.math.abs(it.watt) }.average()
+            val totalWattHours = readings.sumOf { r ->
+                val durationHours = (r.endTime - r.startTime) / 3600_000.0
+                kotlin.math.abs(r.watt) * durationHours
             }
+            val spanMs = last.endTime - first.startTime
+            Log.d(TAG, "aggregateAndUpload: readings=${readings.size}, span=${spanMs}ms, " +
+                "avgP=${String.format("%.4f", totalWatts)}W, totalWh=${String.format("%.6f", totalWattHours)}")
+
+            // Total design capacity in mAh (API expects this). Use PowerProfile; do NOT use
+            // CHARGE_COUNTER — that is remaining charge in µAh, not total capacity.
+            val batteryCapacityMah = BatteryUtil.getBatteryCapacity(context)
 
             val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
             val preferenceManager = PreferenceManager(context)
@@ -138,9 +148,35 @@ class ConsumptionTracker(
             val stationInfo = preferenceManager.getStationInfo()
             val emissionFactor = preferenceManager.getCarbonIntensity() ?: 485
             val gramsCO2 = (totalWattHours / 1000.0) * emissionFactor
+            val climateStatus = preferenceManager.getLastDeviceInfo()?.climateStatus
+            val isGreen = stationInfo?.isGreen
+            val isVerifiedAsGreen = isGreen ?: false
 
             val fromTime = Instant.ofEpochMilli(first.startTime).atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
             val toTime = Instant.ofEpochMilli(last.endTime).atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
+
+            val location = if (latitude != 0.0 || longitude != 0.0) Location(latitude, longitude) else null
+            val body = AddDeviceConsumptionBody(
+                deviceId = deviceId,
+                totalWatts = totalWatts,
+                totalWattHours = totalWattHours,
+                totalGramsCO2 = gramsCO2,
+                from = fromTime,
+                to = toTime,
+                batteryLevelFrom = first.level,
+                batteryLevelTo = last.level,
+                isCharging = true,
+                sourceType = "Charging",
+                batteryCapacity = batteryCapacityMah,
+                emissionFactor = emissionFactor,
+                cfeScore = stationInfo?.cfeScore,
+                wifiAddress = wifiBssid,
+                stationCode = stationCode,
+                isGreen = isGreen,
+                climateStatus = climateStatus,
+                location = location,
+                isVerifiedAsGreen = isVerifiedAsGreen
+            )
 
             val measurement = AndroidMeasurementModel(
                 deviceId = deviceId,
@@ -152,41 +188,57 @@ class ConsumptionTracker(
                 batteryLevelFrom = first.level,
                 batteryLevelTo = last.level,
                 isCharging = true,
-                averageAmpere = averageAmpere,
-                averageVoltage = averageVoltage,
-                interval = INTERVAL_SEC,
-                totalSamples = readings.size,
-                sourceType = last.source,
+                sourceType = "Charging",
                 batteryCapacity = batteryCapacityMah,
                 emissionFactor = emissionFactor,
                 cfeScore = stationInfo?.cfeScore,
                 wifiAddress = wifiBssid,
                 stationCode = stationCode,
-                stationId = stationInfo?.stationId,
-                isGreen = stationInfo?.isGreen,
+                isGreen = isGreen,
+                climateStatus = climateStatus,
                 latitude = latitude,
-                longitude = longitude
+                longitude = longitude,
+                isVerifiedAsGreen = isVerifiedAsGreen
             )
 
-            Log.d(TAG, "Uploading aggregated batch: ${readings.size} readings, ${String.format("%.3f", totalWattHours)}Wh")
+            Log.d(TAG, "Uploading aggregated batch: ${readings.size} readings, " +
+                "level ${first.level}%→${last.level}%, ${String.format("%.3f", totalWattHours)}Wh")
 
-            val hasValidContext = wifiBssid != null && (latitude != 0.0 || longitude != 0.0)
+            // Upload when we have WiFi (wiFiAddress is required by API). Location can be 0,0 if unavailable.
+            val hasValidContext = wifiBssid != null
             if (hasValidContext) {
-                val api = NetworkModule.provideThingsApiService(context)
-                val response = api.addDeviceConsumptionRange(listOf(measurement))
-                if (response.isSuccessful) {
-                    Log.d(TAG, "Successfully uploaded aggregated batch")
-                    readingDao.deleteByGroup(groupId)
-                    lastBatchUploadTime = System.currentTimeMillis()
-                    syncPendingConsumptions()
-                } else {
-                    Log.w(TAG, "Upload failed: ${response.code()}, saving to local DB")
+                try {
+                    val requestJson = gson.toJson(body)
+                    Log.d(TAG, "adddeviceconsumption REQUEST (single): $requestJson")
+
+                    val api = NetworkModule.provideThingsApiService(context)
+                    val response = api.addDeviceConsumption(body)
+                    if (response.isSuccessful) {
+                        val measurementId = response.body()?.measurementId
+                        Log.d(TAG, "Successfully uploaded aggregated batch, measurementId=$measurementId")
+                        readingDao.deleteByGroup(groupId)
+                        lastBatchUploadTime = System.currentTimeMillis()
+                        syncPendingConsumptions()
+                    } else {
+                        val errorBody = response.errorBody()?.string() ?: "no body"
+                        Log.w(TAG, "Upload failed: code=${response.code()}, body=$errorBody, saving to local DB")
+                        saveMeasurementToPending(measurement)
+                        readingDao.deleteByGroup(groupId)
+                        lastBatchUploadTime = System.currentTimeMillis()
+                    }
+                } catch (e: Exception) {
+                    // Network timeout, IO error, parse error, etc. — save to pending so data is synced later
+                    Log.e(TAG, "Upload request failed (e.g. timeout), saving to pending: ${e.message}", e)
+                    Sentry.withScope { scope ->
+                        scope.setTag("operation", "aggregateAndUpload_upload")
+                        Sentry.captureException(e)
+                    }
                     saveMeasurementToPending(measurement)
                     readingDao.deleteByGroup(groupId)
                     lastBatchUploadTime = System.currentTimeMillis()
                 }
             } else {
-                Log.d(TAG, "No WiFi/location, saving aggregated measurement to local DB")
+                Log.d(TAG, "No WiFi (BSSID unavailable), saving aggregated measurement to local DB")
                 saveMeasurementToPending(measurement)
                 readingDao.deleteByGroup(groupId)
                 lastBatchUploadTime = System.currentTimeMillis()
@@ -219,24 +271,59 @@ class ConsumptionTracker(
         try {
             val pendingList = database.consumptionDao().getAllPendingOnce()
             if (pendingList.isEmpty()) return
-            Log.d(TAG, "Syncing ${pendingList.size} pending consumptions...")
-            val measurements = pendingList.mapNotNull { entity ->
-                try {
+            Log.d(TAG, "Syncing ${pendingList.size} pending consumptions (single adddeviceconsumption each)...")
+            val api = NetworkModule.provideThingsApiService(context)
+            val succeededIds = mutableListOf<Long>()
+            for (entity in pendingList) {
+                val measurement = try {
                     gson.fromJson(entity.modelJson, AndroidMeasurementModel::class.java)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing consumption entity: ${e.message}")
-                    null
+                    Log.e(TAG, "Error parsing consumption entity id=${entity.id}: ${e.message}")
+                    continue
+                }
+                val location = if (measurement.latitude != null && measurement.longitude != null &&
+                    (measurement.latitude != 0.0 || measurement.longitude != 0.0)
+                ) Location(measurement.latitude, measurement.longitude) else null
+                val body = AddDeviceConsumptionBody(
+                    deviceId = measurement.deviceId,
+                    totalWatts = measurement.totalWatts,
+                    totalWattHours = measurement.totalWattHours,
+                    totalGramsCO2 = measurement.totalGramsCO2,
+                    from = measurement.from,
+                    to = measurement.to,
+                    batteryLevelFrom = measurement.batteryLevelFrom,
+                    batteryLevelTo = measurement.batteryLevelTo,
+                    isCharging = measurement.isCharging,
+                    sourceType = measurement.sourceType,
+                    batteryCapacity = measurement.batteryCapacity,
+                    emissionFactor = measurement.emissionFactor,
+                    cfeScore = measurement.cfeScore,
+                    wifiAddress = measurement.wifiAddress,
+                    stationCode = measurement.stationCode,
+                    isGreen = measurement.isGreen,
+                    climateStatus = measurement.climateStatus,
+                    location = location,
+                    isVerifiedAsGreen = measurement.isVerifiedAsGreen
+                )
+                val requestJson = gson.toJson(body)
+                Log.d(TAG, "adddeviceconsumption REQUEST (pending id=${entity.id}): $requestJson")
+                try {
+                    val response = api.addDeviceConsumption(body)
+                    if (response.isSuccessful) {
+                        val measurementId = response.body()?.measurementId
+                        Log.d(TAG, "Pending upload ok: id=${entity.id}, measurementId=$measurementId")
+                        succeededIds.add(entity.id)
+                    } else {
+                        val errorBody = response.errorBody()?.string() ?: "no body"
+                        Log.w(TAG, "Pending upload failed: id=${entity.id}, code=${response.code()}, body=$errorBody")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Pending upload request failed: id=${entity.id}, ${e.message}", e)
                 }
             }
-            if (measurements.isEmpty()) return
-            val api = NetworkModule.provideThingsApiService(context)
-            val response = api.addDeviceConsumptionRange(measurements)
-            if (response.isSuccessful) {
-                val ids = pendingList.map { it.id }
-                database.consumptionDao().deleteByIds(ids)
-                Log.d(TAG, "Synced and deleted ${ids.size} pending consumptions")
-            } else {
-                Log.w(TAG, "Batch sync failed: ${response.code()}")
+            if (succeededIds.isNotEmpty()) {
+                database.consumptionDao().deleteByIds(succeededIds)
+                Log.d(TAG, "Synced and deleted ${succeededIds.size} pending consumptions")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing pending consumptions", e)

@@ -36,24 +36,45 @@ data class RegisterDeviceRequest(
     @SerializedName("Longitude") val longitude: Double? = null
 )
 
-/** getdeviceinfo does not use latitude/longitude. WiFiAddress is mandatory – do not send request without it. */
+/** getdeviceinfo: WiFiAddress optional – null when on mobile (no WiFi). */
 data class DeviceInfoRequest(
     @SerializedName("DeviceId") val deviceId: String,
     @SerializedName("StationCode") val stationCode: String? = null,
-    @SerializedName("WiFiAddress") val wifiAddress: String,
+    @SerializedName("WiFiAddress") val wifiAddress: String? = null,
     @SerializedName("CurrentVersion") val currentVersion: String? = null,
     @SerializedName("Latitude") val latitude: Double? = null,
     @SerializedName("Longitude") val longitude: Double? = null
 )
 
-data class AndroidMeasurementRequest(
-    @SerializedName("AndroidMeasurementModel") val model: AndroidMeasurementModel
+/** Direct body for POST /v4/androidapp/adddeviceconsumption — no wrapper, body is the object. */
+data class Location(
+    val lat: Double,
+    val lng: Double
 )
 
-data class AndroidMeasurementRangeRequest(
-    @SerializedName("AndroidMeasurementModel") val models: List<AndroidMeasurementModel>
+data class AddDeviceConsumptionBody(
+    val deviceId: String,
+    val totalWatts: Double,
+    val totalWattHours: Double,
+    val totalGramsCO2: Double,
+    val from: String,
+    val to: String,
+    val batteryLevelFrom: Int,
+    val batteryLevelTo: Int,
+    val isCharging: Boolean? = null,
+    val sourceType: String? = null,
+    val batteryCapacity: Int? = null,
+    val emissionFactor: Int? = null,
+    val cfeScore: Double? = null,
+    @SerializedName("wiFiAddress") val wifiAddress: String? = null,
+    val stationCode: String? = null,
+    val isGreen: Boolean? = null,
+    val climateStatus: Int? = null,
+    val location: Location? = null,
+    val isVerifiedAsGreen: Boolean? = null
 )
 
+/** Internal model for pending storage (keeps latitude/longitude). */
 data class AndroidMeasurementModel(
     val deviceId: String,
     val totalWatts: Double,
@@ -63,24 +84,15 @@ data class AndroidMeasurementModel(
     val to: String,   // ISO8601
     val batteryLevelFrom: Int,
     val batteryLevelTo: Int,
-    
-    // Existing code usage compatibility
     val isCharging: Boolean? = null,
-
-    // New Spec Fields
-    val averageAmpere: Double? = null,
-    val averageVoltage: Double? = null,
-    val interval: Int? = null,
-    val totalSamples: Int? = null,
     val sourceType: String? = null,
     val batteryCapacity: Int? = null,
-    @SerializedName("EmissionFactor") val emissionFactor: Int? = null,
+    val emissionFactor: Int? = null,
     val cfeScore: Double? = null,
     val userId: String? = null,
     val appId: String? = null,
     @SerializedName("wiFiAddress") val wifiAddress: String? = null,
     val stationCode: String? = null,
-    val stationId: String? = null,
     val isGreen: Boolean? = null,
     val climateStatus: Int? = null,
     val latitude: Double? = null,
@@ -113,12 +125,12 @@ data class AppConsumptionModel(
     val appId: String
 )
 
-/** Flat body for setclimatestatus: {"deviceId","latitude","longitude","wiFiAddress"} — no wrapper. */
+/** Flat body for setclimatestatus: {"deviceId","latitude","longitude","wiFiAddress"} — no wrapper. wiFiAddress null when on mobile (no WiFi). */
 data class SetClimateStatusRequest(
     @SerializedName("deviceId") val deviceId: String,
     @SerializedName("latitude") val latitude: Double,
     @SerializedName("longitude") val longitude: Double,
-    @SerializedName("wiFiAddress") val wiFiAddress: String,
+    @SerializedName("wiFiAddress") val wiFiAddress: String? = null,
     @SerializedName("stationCode") val stationCode: String? = null
 )
 

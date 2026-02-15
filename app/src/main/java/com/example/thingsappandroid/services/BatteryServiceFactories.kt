@@ -32,7 +32,7 @@ class ConsumptionTrackerFactoryImpl @Inject constructor(
  * Provided by DI; used by BatteryService.
  */
 interface DeviceInfoApiFactory {
-    fun create(deviceId: String, onUpdated: () -> Unit): BatteryServiceDeviceInfoApi
+    fun create(deviceId: String, onUpdated: () -> Unit, isCharging: () -> Boolean): BatteryServiceDeviceInfoApi
 }
 
 /**
@@ -44,6 +44,6 @@ class DeviceInfoApiFactoryImpl @Inject constructor(
     private val tokenManager: TokenManager,
     private val thingsRepository: ThingsRepository
 ) : DeviceInfoApiFactory {
-    override fun create(deviceId: String, onUpdated: () -> Unit): BatteryServiceDeviceInfoApi =
-        BatteryServiceDeviceInfoApi(context, deviceId, preferenceManager, tokenManager, thingsRepository, onUpdated)
+    override fun create(deviceId: String, onUpdated: () -> Unit, isCharging: () -> Boolean): BatteryServiceDeviceInfoApi =
+        BatteryServiceDeviceInfoApi(context, deviceId, preferenceManager, tokenManager, thingsRepository, onUpdated, isCharging)
 }

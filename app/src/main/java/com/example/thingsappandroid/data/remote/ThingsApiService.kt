@@ -72,9 +72,11 @@ interface ThingsApiService {
     @POST("/v4/androidapp/getlatestmessages")
     suspend fun getLatestMessages(): Response<LatestMessagesResponse>
 
+    /** Single: body is the measurement object directly (no wrapper), response { "measurementId": "guid" } */
     @POST("/v4/androidapp/adddeviceconsumption")
-    suspend fun addDeviceConsumption(@Body request: AndroidMeasurementModel): Response<MeasurementResponse>
+    suspend fun addDeviceConsumption(@Body body: AddDeviceConsumptionBody): Response<MeasurementResponse>
 
+    /** Batch: request [ body, ... ], response { "success": true } */
     @POST("/v4/androidapp/adddeviceconsumptionrange")
-    suspend fun addDeviceConsumptionRange(@Body request: List<AndroidMeasurementModel>): Response<ResponseBody> // API returns [] on success
+    suspend fun addDeviceConsumptionRange(@Body request: List<AddDeviceConsumptionBody>): Response<BasicResponse>
 }
