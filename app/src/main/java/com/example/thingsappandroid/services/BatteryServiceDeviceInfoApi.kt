@@ -107,7 +107,7 @@ class BatteryServiceDeviceInfoApi(
             longitude = longitude
         )
         try {
-
+            sendLoadingStartedBroadcast()
             Log.d("getDeviceInfo","fetchDeviceInfo")
             val response = withTimeoutOrNull(12_000L) {
                 withContext(Dispatchers.IO) { NetworkModule.api.getDeviceInfo(request) }
@@ -138,6 +138,8 @@ class BatteryServiceDeviceInfoApi(
                 applyOfflineChargingDeviceInfo()
                 return
             }
+        } finally {
+            sendLoadingFinishedBroadcast()
         }
         sendDeviceInfoUpdatedBroadcast()
         onUpdated()
@@ -148,5 +150,17 @@ class BatteryServiceDeviceInfoApi(
             setPackage(context.packageName)
         }
         context.sendBroadcast(intent)
+    }
+
+    private fun sendLoadingStartedBroadcast() {
+        Intent(BatteryServiceActions.LOADING_STARTED).apply {
+            setPackage(context.packageName)
+        }.also { context.sendBroadcast(it) }
+    }
+
+    private fun sendLoadingFinishedBroadcast() {
+        Intent(BatteryServiceActions.LOADING_FINISHED).apply {
+            setPackage(context.packageName)
+        }.also { context.sendBroadcast(it) }
     }
 }

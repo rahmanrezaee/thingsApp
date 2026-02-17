@@ -144,7 +144,7 @@ class BatteryService : Service() {
             Log.d("BatteryService", "handleBatteryIntent: charging state unchanged, skipping")
             return
         }
-
+        // startLoading
         chargeState = result.state
 
         if (!result.state.isCharging) {
@@ -170,7 +170,7 @@ class BatteryService : Service() {
 
         Log.d("BatteryService", "handleBatteryIntent: calling runSetClimateStatusIfReady")
         runSetClimateStatusIfReady(null)
-
+        // hide loading
        
     }
 
@@ -320,6 +320,9 @@ class BatteryService : Service() {
     override fun onCreate() {
         super.onCreate()
         try {
+            Log.d("BatteryService", "onCreate the service")
+
+
             deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
                 ?: java.util.UUID.randomUUID().toString()
 
@@ -340,6 +343,8 @@ class BatteryService : Service() {
 
             deviceInfoApi = deviceInfoApiFactory.create(deviceId, { notificationHandler.updateNotification() }, { isCharging() })
 
+
+            Log.d("BatteryService", "onCreate the createReceiver")
             internalBroadcastReceiver = BatteryServiceBroadcastHandler.createReceiver(
                 onDeviceInfoUpdated = { notificationHandler.updateNotification() },
                 onForNewDeviceCallClimateStatus = { intent ->
@@ -364,7 +369,7 @@ class BatteryService : Service() {
                     }
                 }
             )
-
+            Log.d("BatteryService", "onCreate the startNotificationMonitoring")
             notificationHandler.createChannels()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startNotificationMonitoring()
@@ -384,6 +389,9 @@ class BatteryService : Service() {
 
     @SuppressLint("UnspecifiedImmutableFlag")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+
+
+        Log.d("BatteryService", "onStartCommand the Service")
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             stopSelf()
             return START_NOT_STICKY
@@ -429,6 +437,8 @@ class BatteryService : Service() {
             )
             receiverRegistered = true
         }
+
+        Log.d("BatteryService", "onStartCommand the runStartConsumptionIfChargingAndNotStarted")
 
         serviceScope.launch {
             // Start consumption if already charging (e.g. app updated while plugged in)

@@ -18,6 +18,11 @@ object BatteryServiceActions {
 
     /** Intent action to open station code dialog (e.g. from notification tap) */
     const val OPEN_STATION_CODE = "com.example.thingsappandroid.OPEN_STATION_CODE"
+
+    /** Broadcast when getDeviceInfo or SetClimateStatus API call starts. HomeViewModel shows loading UI. */
+    const val LOADING_STARTED = "com.example.thingsappandroid.LOADING_STARTED"
+    /** Broadcast when getDeviceInfo or SetClimateStatus API call finishes. HomeViewModel hides loading UI. */
+    const val LOADING_FINISHED = "com.example.thingsappandroid.LOADING_FINISHED"
 }
 
 /** Notification channel and notification IDs for BatteryService. */

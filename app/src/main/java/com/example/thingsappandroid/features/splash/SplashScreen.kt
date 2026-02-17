@@ -62,7 +62,7 @@ fun SplashScreen(
             .background(colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        // Show logo only when permissions are granted and loading
+        // Show logo and loading only when permissions are granted and loading
         if (hasRequiredPermissions && hasBackgroundLocation) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -73,7 +73,7 @@ fun SplashScreen(
                 val logoRes = if (isDarkTheme) R.drawable.logo_name_light else R.drawable.logo_name
                 Spacer(modifier = Modifier.weight(0.3f))
                 Image(
-                    painter = painterResource(id =  R.drawable.logo ),
+                    painter = painterResource(id = R.drawable.logo),
                     contentDescription = "ThingsApp Logo",
                     modifier = Modifier.size(150.dp),
                     contentScale = ContentScale.Fit

@@ -143,7 +143,7 @@ fun PrimaryButton(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = 8.dp)
                 ) {
                     val painter = iconPainter ?: icon?.let { painterResource(id = it) }
 

@@ -52,6 +52,7 @@ class ClimateStatusManager(private val context: Context) {
         currentJob?.cancel()
         currentJob = job
 
+        var loadingBroadcastSent = false
         return try {
             val deviceId = DeviceUtils.getStoredDeviceId(context)
             if (deviceId.isNullOrBlank()) {
@@ -84,6 +85,8 @@ class ClimateStatusManager(private val context: Context) {
                 return null
             }
 
+            loadingBroadcastSent = true
+            sendLoadingStartedBroadcast()
             val climateStatus = callSetClimateStatus(deviceId, wifiBssid, stationCode)
             callGetDeviceInfo(deviceId, wifiBssid)
             climateStatus
@@ -96,6 +99,7 @@ class ClimateStatusManager(private val context: Context) {
             null
         } finally {
             if (currentJob == job) currentJob = null
+            if (loadingBroadcastSent) sendLoadingFinishedBroadcast()
         }
     }
 
@@ -190,5 +194,17 @@ class ClimateStatusManager(private val context: Context) {
                 Sentry.captureException(e)
             }
         }
+    }
+
+    private fun sendLoadingStartedBroadcast() {
+        Intent(BatteryServiceActions.LOADING_STARTED).apply {
+            setPackage(context.packageName)
+        }.also { context.sendBroadcast(it) }
+    }
+
+    private fun sendLoadingFinishedBroadcast() {
+        Intent(BatteryServiceActions.LOADING_FINISHED).apply {
+            setPackage(context.packageName)
+        }.also { context.sendBroadcast(it) }
     }
 }

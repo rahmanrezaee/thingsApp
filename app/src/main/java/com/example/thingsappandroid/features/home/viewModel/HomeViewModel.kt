@@ -79,7 +79,10 @@ class HomeViewModel @Inject constructor(
 
     /** Track if initialization has been completed to prevent duplicate calls */
     private var isInitialized = false
-    
+
+    /** Reference count for overlapping getDeviceInfo/SetClimateStatus API calls. Loading stays visible until all finish. */
+    private var loadingRefCount = 0
+
     /**
      * Single internal broadcast receiver that handles all broadcast intents
      */
@@ -89,6 +92,14 @@ class HomeViewModel @Inject constructor(
             Log.d(HOME_LOG, "📡 Broadcast received: $action")
             when (action) {
                 BatteryServiceActions.DEVICEINFO_UPDATED -> handleDeviceInfoUpdated()
+                BatteryServiceActions.LOADING_STARTED -> {
+                    loadingRefCount++
+                    _state.update { it.copy(isLoading = true) }
+                }
+                BatteryServiceActions.LOADING_FINISHED -> {
+                    loadingRefCount = maxOf(0, loadingRefCount - 1)
+                    _state.update { it.copy(isLoading = loadingRefCount > 0) }
+                }
                 LocationManager.PROVIDERS_CHANGED_ACTION,
                 LocationManager.MODE_CHANGED_ACTION -> handleLocationChanged(action)
                 WifiManager.NETWORK_STATE_CHANGED_ACTION,
@@ -663,6 +674,8 @@ class HomeViewModel @Inject constructor(
     private fun registerBroadcastReceivers() {
         val filter = IntentFilter().apply {
             addAction(BatteryServiceActions.DEVICEINFO_UPDATED)
+            addAction(BatteryServiceActions.LOADING_STARTED)
+            addAction(BatteryServiceActions.LOADING_FINISHED)
             addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
             addAction(LocationManager.MODE_CHANGED_ACTION)
             addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
