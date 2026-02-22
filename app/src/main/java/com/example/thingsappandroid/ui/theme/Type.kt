@@ -21,10 +21,18 @@ val Typography = Typography(
     // "Green" status text
     headlineLarge = TextStyle(
         fontFamily = VendSansFontFamily,
-        fontWeight = FontWeight.SemiBold, // 600
+        fontWeight = FontWeight.Bold, // 600
         fontSize = 24.sp,
-        lineHeight = 32.sp
+        lineHeight = 32.sp,
+        letterSpacing = (-1).sp
 
+    ),
+    // Section header (e.g. "Required Permissions", "One more step")
+    headlineSmall = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp
     ),
     // "ThingsApp" logo text
     headlineMedium = TextStyle(
@@ -40,6 +48,13 @@ val Typography = Typography(
         fontSize = 16.sp,
         lineHeight = 18.sp
     ),
+    // Subsection headers (e.g. "How to grant permissions", "This enables:", permission card title)
+    titleSmall = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        lineHeight = 18.sp
+    ),
     // Large numbers (84%, 25.43)
     titleLarge = TextStyle(
         fontFamily = VendSansFontFamily,
@@ -47,10 +62,38 @@ val Typography = Typography(
         fontSize = 18.sp,
         lineHeight = 20.sp
     ),
-    // Body text
+    // Subtitle / dialog body
+    bodyLarge = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 16.sp,
+        lineHeight = 24.sp
+    ),
+    // Body text (footer, instruction steps, benefit row)
     bodyMedium = TextStyle(
         fontFamily = VendSansFontFamily,
         fontWeight = FontWeight.Medium, // 500
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    // Card description (e.g. permission card body)
+    bodySmall = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 18.sp
+    ),
+    // Buttons, step numbers
+    labelLarge = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    // Permission card subtitle ("Allow all the time")
+    labelMedium = TextStyle(
+        fontFamily = VendSansFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
         lineHeight = 20.sp
     ),

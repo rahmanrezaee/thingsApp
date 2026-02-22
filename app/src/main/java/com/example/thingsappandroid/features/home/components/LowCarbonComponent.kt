@@ -9,7 +9,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -24,23 +23,41 @@ import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.theme.*
 
+private fun carbonIntensityLabel(intensity: Int): String = when {
+    intensity <= 100 -> "Low"
+    intensity <= 300 -> "Medium"
+    else -> "High"
+}
+
+private fun carbonIntensityColor(intensity: Int): Color = when {
+    intensity <= 50 -> Color(0xFF008000)           // Green
+    intensity <= 100 -> Color(0xFF9ACD32)         // YellowGreen
+    intensity <= 250 -> Color(0xFFE6B800)          // Yellow
+    intensity <= 400 -> Color(0xFFFFA500)          // Orange
+    intensity <= 600 -> Color(0xFFFF4500)          // OrangeRed
+    else -> Color(0xFF8B4513)                     // SaddleBrown
+}
+
 @Composable
 fun LowCarbonComponent(
     intensity: Int = 96,
     isGreen: Boolean = false
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val label = carbonIntensityLabel(intensity)
+    val intensityColor = carbonIntensityColor(intensity)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(colorScheme.surfaceContainerHighest)
-                .then(if (isGreen) Modifier.alpha(0.55f) else Modifier),
+                .background(colorScheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(id = R.drawable.large_carbon),
+                painter = painterResource(
+                    id = if (isGreen) R.drawable.large_carbon_fade else R.drawable.large_carbon
+                ),
                 contentDescription = "Carbon CO2",
                 modifier = Modifier.size(40.dp)
             )
@@ -50,16 +67,16 @@ fun LowCarbonComponent(
 
         Text(
             buildAnnotatedString {
-                withStyle(style = SpanStyle(color = ActivityGreen, fontWeight = FontWeight.Bold)) {
-                    append("Low")
+                withStyle(style = SpanStyle(color = intensityColor, fontWeight = FontWeight.Bold)) {
+                    append(label)
                 }
                 append(" ($intensity gCO₂e/\nkWh)")
             },
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium,
-                lineHeight = 18.sp
+                lineHeight = 16.sp
             ),
             textAlign = TextAlign.Center
         )

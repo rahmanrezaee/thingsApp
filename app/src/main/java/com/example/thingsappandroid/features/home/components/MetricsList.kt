@@ -19,17 +19,18 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.ui.theme.*
 
 @SuppressLint("DefaultLocale")
 @Composable
 fun MetricsList(
-    consumptionKwh: Float = 0.14f,
+    consumptionKwh: Float = 1f,
     avoidedEmissions: Float = 0.00f,
-    carbonIntensity: Int = 0,
+    totalEmissions: Float = 0.00f,
     onElectricityConsumptionClick: (() -> Unit)? = null,
     onAvoidedEmissionsClick: (() -> Unit)? = null,
-    onCarbonIntensityClick: (() -> Unit)? = null
+    onTotalEmissionsClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Column(
@@ -39,24 +40,29 @@ fun MetricsList(
         MetricItem(
             icon = Icons.Rounded.Bolt,
             label = "Electricity Consumption",
-            value = String.format("%.2f kWh", consumptionKwh),
+            value = if (consumptionKwh < 1f) {
+                String.format("%.0f Wh", consumptionKwh * 1000f)
+            } else {
+                String.format("%.2f kWh", consumptionKwh)
+            },
             onClick = onElectricityConsumptionClick,
             colorScheme = colorScheme
         )
-        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
-        MetricItem(
-            icon = Icons.Rounded.Public,
-            label = "Avoided Carbon Emissions",
-            value = String.format("%.2f gCO₂e", avoidedEmissions),
-            onClick = onAvoidedEmissionsClick,
-            colorScheme = colorScheme
-        )
-        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
+        HorizontalDivider(color = colorScheme.surfaceContainerHighest, thickness = 1.dp)
         MetricItem(
             icon = Icons.Rounded.ElectricalServices,
-            label = "Current Carbon Intensity",
-            value = "$carbonIntensity gCO₂e/kWh",
-            onClick = onCarbonIntensityClick,
+            label = "Total CO₂ Emissions",
+            value = String.format("%.2f gCO₂e", totalEmissions * 1000f),
+            onClick = onTotalEmissionsClick,
+            colorScheme = colorScheme
+        )
+
+        HorizontalDivider(color = colorScheme.surfaceContainerHighest, thickness = 1.dp)
+        MetricItem(
+            icon = Icons.Rounded.Public,
+            label = "Avoided CO₂ Emissions",
+            value = String.format("%.2f gCO₂e", avoidedEmissions),
+            onClick = onAvoidedEmissionsClick,
             colorScheme = colorScheme
         )
     }
@@ -83,13 +89,15 @@ fun MetricItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colorScheme.onSurfaceVariant,
+                tint = colorScheme.outline,
                 modifier = Modifier.size(20.dp)
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = colorScheme.onSurfaceVariant,
+                    color = colorScheme.outline,
+                    fontSize = 15.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
@@ -97,7 +105,7 @@ fun MetricItem(
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
-                color = colorScheme.onSurface,
+                color = colorScheme.outline,
                 fontWeight = FontWeight.Bold
             )
         )
@@ -107,7 +115,17 @@ fun MetricItem(
 @Preview(showBackground = true)
 @Composable
 fun MetricsListPreview() {
-    ThingsAppAndroidTheme {
+    ThingsAppAndroidTheme(true) {
+        Box(modifier = Modifier.padding(16.dp)) {
+            MetricsList()
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun MetricsListPreviewLight() {
+    ThingsAppAndroidTheme(darkTheme = false) {
         Box(modifier = Modifier.padding(16.dp)) {
             MetricsList()
         }

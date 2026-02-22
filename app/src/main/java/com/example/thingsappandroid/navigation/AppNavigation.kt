@@ -1,7 +1,10 @@
 package com.example.thingsappandroid.navigation
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -100,27 +103,33 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             var hasBackgroundLocation by remember {
                 mutableStateOf(PermissionUtils.hasBackgroundLocationPermission(context))
             }
-            
+            var hasNotificationPermission by remember {
+                mutableStateOf(PermissionUtils.hasNotificationPermission(context))
+            }
+            var hasForegroundLocationPermission by remember {
+                mutableStateOf(PermissionUtils.hasForegroundLocationPermission(context))
+            }
+
             // Re-check permissions when returning from Settings (lifecycle observer)
             val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
             androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
                 val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                     if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                        // Re-check permission states when returning from Settings
                         val newHasPermissions = PermissionUtils.hasRequiredPermissions(context)
                         val newHasBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(context)
-                        
-                        if (newHasPermissions != hasPermissions) {
-                            hasPermissions = newHasPermissions
-                        }
+                        val newHasNotification = PermissionUtils.hasNotificationPermission(context)
+                        val newHasForegroundLocation = PermissionUtils.hasForegroundLocationPermission(context)
+
+                        if (newHasPermissions != hasPermissions) hasPermissions = newHasPermissions
                         if (newHasBackgroundLocation != hasBackgroundLocation) {
                             hasBackgroundLocation = newHasBackgroundLocation
-                            // If background location was just granted, dismiss the dialog
                             if (newHasBackgroundLocation && showBackgroundLocationDialog) {
                                 showBackgroundLocationDialog = false
                                 Toast.makeText(context, "Background location enabled!", Toast.LENGTH_SHORT).show()
                             }
                         }
+                        if (newHasNotification != hasNotificationPermission) hasNotificationPermission = newHasNotification
+                        if (newHasForegroundLocation != hasForegroundLocationPermission) hasForegroundLocationPermission = newHasForegroundLocation
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
@@ -144,25 +153,27 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 }
             }
             
-            // Main permission launcher for foreground location + notifications
+            // Main permission launcher for foreground location and/or notifications
             val permissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { results ->
                 hasPermissions = PermissionUtils.hasRequiredPermissions(context)
+                hasNotificationPermission = PermissionUtils.hasNotificationPermission(context)
+                hasForegroundLocationPermission = PermissionUtils.hasForegroundLocationPermission(context)
                 hasBackgroundLocation = PermissionUtils.hasBackgroundLocationPermission(context)
-                
+
                 if (hasPermissions) {
                     (activity as? MainActivity)?.onPermissionsGranted()
-                    
-                    // After foreground permissions granted, check if we need background location
-                    if (PermissionUtils.needsBackgroundLocationPrompt(context)) {
-                        if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q) {
-                            // Android 10: Can request via dialog
-                            backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                        } else {
-                            // Android 11+: Must use Settings - show dialog
-                            showBackgroundLocationDialog = true
-                        }
+                }
+
+                // After foreground location granted, prompt for background location if needed
+                val locationGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+                if (locationGranted && PermissionUtils.needsBackgroundLocationPrompt(context)) {
+                    if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q) {
+                        backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    } else {
+                        showBackgroundLocationDialog = true
                     }
                 }
             }
@@ -252,26 +263,55 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     }
                 },
                 onBackgroundLocationSkip = {
-                    // Background location is MANDATORY - show the dialog again
-                    Toast.makeText(
-                        context,
-                        "Background location is required for the app to function. Please grant permission.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    // Keep dialog visible - user must grant permission
-                    showBackgroundLocationDialog = true
+                    // User dismissed or cancelled - close the dialog
+                    showBackgroundLocationDialog = false
                 },
                 hasRequiredPermissions = hasPermissions,
                 hasBackgroundLocation = hasBackgroundLocation,
+                hasNotificationPermission = hasNotificationPermission,
+                hasForegroundLocationPermission = hasForegroundLocationPermission,
+                onRequestNotificationPermission = {
+                    if (!hasNotificationPermission && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+                    }
+                },
+                onRequestLocationPermission = {
+                    if (!hasForegroundLocationPermission) {
+                        val locationPerms = mutableListOf<String>()
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                            locationPerms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                            locationPerms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }
+                        if (locationPerms.isNotEmpty()) {
+                            permissionLauncher.launch(locationPerms.toTypedArray())
+                        } else {
+                            hasForegroundLocationPermission = true
+                            if (PermissionUtils.needsBackgroundLocationPrompt(context)) {
+                                if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q) {
+                                    backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                                } else {
+                                    showBackgroundLocationDialog = true
+                                }
+                            }
+                        }
+                    } else if (PermissionUtils.needsBackgroundLocationPrompt(context)) {
+                        // Foreground already granted, show background location dialog
+                        showBackgroundLocationDialog = true
+                    }
+                },
+                onSkipPermissions = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo("splash_route") { inclusive = true }
+                    }
+                },
                 onGrantPermissions = {
                     val perms = PermissionUtils.getPermissionsToRequest(context)
                     if (perms.isNotEmpty()) {
                         permissionLauncher.launch(perms)
                     } else {
-                        // All initial permissions granted
                         (activity as? MainActivity)?.onPermissionsGranted()
-                        
-                        // Check if we need background location (Android 11+)
                         if (PermissionUtils.needsBackgroundLocationPrompt(context) &&
                             PermissionUtils.requiresSettingsForBackgroundLocation()) {
                             showBackgroundLocationDialog = true

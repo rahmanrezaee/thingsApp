@@ -6,16 +6,18 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,10 +36,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -51,8 +53,10 @@ import com.example.thingsappandroid.features.comingsoon.ComingSoonScreen
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
 import com.example.thingsappandroid.features.profile.screens.ProfileScreen
 import com.example.thingsappandroid.navigation.Screen
-import com.example.thingsappandroid.ui.theme.PrimaryGreen
-import com.example.thingsappandroid.ui.theme.TextWhite
+import com.example.thingsappandroid.R
+import com.example.thingsappandroid.ui.theme.Gray400
+import com.example.thingsappandroid.ui.theme.Gray900
+import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 import kotlinx.coroutines.delay
 
 @Composable
@@ -122,133 +126,151 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        bottomBar = {
-            HomeBottomBar(
-                selectedTab = currentTab,
-                onTabSelected = { newIndex: Int ->
-                    homeViewModel.dispatch(
-                        ActivityIntent.SelectBottomTab(
-                            newIndex
-                        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            bottomBar = {
+                if (!state.isLoading) {
+                    HomeBottomBar(
+                        selectedTab = currentTab,
+                        onTabSelected = { newIndex: Int ->
+                            homeViewModel.dispatch(
+                                ActivityIntent.SelectBottomTab(
+                                    newIndex
+                                )
+                            )
+                        }
                     )
                 }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            when (currentTab) {
-                0 -> HomeScreen(
-                    state = state,
-                    onIntent = { intent: ActivityIntent -> homeViewModel.dispatch(intent) },
-                    onOpenLocationSettings = {
-                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                    }
-                )
-
-                1 -> ComingSoonScreen(
-                    title = "ClimateIn is Coming Soon",
-                    description = "Soon you can view your climate data\nand energy insights inside the app.\nFor now, visit ClimateIn.",
-                    buttonText = "Visit ClimateIn",
-                    onButtonClick = {
-                        uriHandler.openUri("https://climate-in.com/")
-                    }
-                )
-
-                2 -> ComingSoonScreen(
-                    title = "Marketplace is Coming Soon",
-                    description = "Soon you can buy certified green electricity\nand carbon removal inside the app.\nFor now, visit our marketplace.",
-                    buttonText = "Visit Marketplace",
-                    onButtonClick = {
-                        uriHandler.openUri("https://gems.umweltify.com/")
-                    }
-                )
-                3 -> ProfileScreen(
-                    deviceName = state.deviceName,
-                    userEmail = null,
-                    onLogout = { homeViewModel.dispatch(ActivityIntent.Logout) },
-                    onMyAccountClick = { homeViewModel.dispatch(ActivityIntent.NavigateToLogin) },
-                    onAppThemeClick = { navController.navigate(Screen.AppTheme.route) },
-                    onAboutClick = { navController.navigate(Screen.About.route) }
-                )
-            }
-        }
-
-        // Station Code Bottom Sheet - shown only once at MainScreen level
-        if (state.showStationCodeDialog) {
-            key("station_code_bottom_sheet") {
-                StationCodeBottomSheet(
-                    onDismiss = { homeViewModel.dispatch(ActivityIntent.DismissStationCodeDialog) },
-                    onVerify = { code: String ->
-                        homeViewModel.dispatch(
-                            ActivityIntent.SubmitStationCode(
-                                code
-                            )
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            content = { paddingValues ->
+                Box(modifier = Modifier.padding(paddingValues)) {
+                    when (currentTab) {
+                        0 -> HomeScreen(
+                            state = state,
+                            onIntent = { intent: ActivityIntent -> homeViewModel.dispatch(intent) },
+                            onOpenLocationSettings = {
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            }
                         )
-                    },
-                    initialValue = state.stationCode ?: "",
-                    isLoading = state.isUpdatingStation,
-                    errorMessage = state.stationCodeError
-                )
-            }
-        }
 
-        // Loading overlay - shown when getDeviceInfo or SetClimateStatus API is in progress
+                        1 -> ComingSoonScreen(
+                            title = "Explore ClimateIn on the Web",
+                            description = "Browse green apps, track your impact, and unlock climate rewards — all from our full-featured web platform.",
+                            buttonText = "Visit ClimateIn",
+                            onButtonClick = {
+                                uriHandler.openUri("https://climate-in.com/")
+                            },
+                            logoResId = R.drawable.ic_nav_activity
+                        )
+
+                        2 -> ComingSoonScreen(
+                            title = "Shop Green on Our Marketplace",
+                            description = "Buy certified green electricity and carbon removal credits directly from our marketplace. Visit the web for the full experience.",
+                            buttonText = "Visit Marketplace",
+                            onButtonClick = {
+                                uriHandler.openUri("https://gems.umweltify.com/")
+                            }
+                        )
+
+                        3 -> ProfileScreen(
+                            deviceName = state.deviceName,
+                            deviceManufacturer = state.deviceManufacturer,
+                            onDeviceNameChanged = { name ->
+                                homeViewModel.dispatch(ActivityIntent.UpdateDeviceName(name))
+                            },
+                            onAppThemeClick = { navController.navigate(Screen.AppTheme.route) },
+                            onAboutClick = { navController.navigate(Screen.About.route) }
+                        )
+                    }
+                }
+
+                if (state.showStationCodeDialog) {
+                    key("station_code_bottom_sheet") {
+                        StationCodeBottomSheet(
+                            onDismiss = { homeViewModel.dispatch(ActivityIntent.DismissStationCodeDialog) },
+                            onVerify = { code: String ->
+                                homeViewModel.dispatch(
+                                    ActivityIntent.SubmitStationCode(
+                                        code
+                                    )
+                                )
+                            },
+                            initialValue = state.stationCode ?: "",
+                            isLoading = state.isUpdatingStation,
+                            errorMessage = state.stationCodeError
+                        )
+                    }
+                }
+            }
+        )
+
+        // Full-screen loading overlay - hides bottom nav, covers entire screen
         if (state.isLoading) {
-            LoadingDialog()
+            FullScreenLoading()
         }
     }
 }
 
-
-@Preview
 @Composable
-fun LoadingDialog() {
-    Dialog(
-
-        onDismissRequest = { },
-        properties = DialogProperties(
-
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = true
-        )
+private fun FullScreenLoading() {
+    val colorScheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorScheme.background)
     ) {
-
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
         ) {
-
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = PrimaryGreen.copy(alpha = 0.8f),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(40.dp),
-                        strokeWidth = 3.dp,
-                        color = TextWhite.copy(alpha = 0.8f),
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Loading...",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            color = TextWhite.copy(alpha = 0.8f),
-                            fontSize = 16.sp
-
-                        )
-                    )
-                }
-            }
-
-
+            val isDarkTheme = colorScheme.background == Gray900
+            val logoRes = if (isDarkTheme) R.drawable.logo_name_light else R.drawable.logo_name
+            Spacer(modifier = Modifier.weight(0.3f))
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "ThingsApp Logo",
+                modifier = Modifier.size(150.dp),
+                contentScale = ContentScale.Fit
+            )
+            Image(
+                painter = painterResource(id = logoRes),
+                contentDescription = "ThingsApp Logo",
+                modifier = Modifier.width(180.dp),
+                contentScale = ContentScale.Fit
+            )
+            Spacer(modifier = Modifier.weight(0.15f))
+            CircularProgressIndicator(
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.height(5.dp))
+            Text(
+                text = "Synchronization...",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 16.sp,
+                    lineHeight = 18.sp
+                ),
+                color = colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "ThingsApp by Umweltify",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 16.sp,
+                    lineHeight = 14.sp
+                ),
+                color = Gray400
+            )
+            Spacer(modifier = Modifier.weight(0.2f))
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewFullScreenLoading() {
+    ThingsAppAndroidTheme {
+        FullScreenLoading()
     }
 }

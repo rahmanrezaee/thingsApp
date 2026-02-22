@@ -28,6 +28,7 @@ import com.example.thingsappandroid.services.utils.ClimateStatusManager
 import com.example.thingsappandroid.util.BatteryUtil
 import com.example.thingsappandroid.services.BatteryServiceActions
 import com.example.thingsappandroid.util.ClimateUtils
+import com.example.thingsappandroid.util.PermissionUtils
 import com.example.thingsappandroid.util.WifiUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.sentry.Sentry
@@ -69,6 +70,10 @@ class HomeViewModel @Inject constructor(
         val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
         val model = Build.MODEL
         if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
+
+    private val deviceManufacturer: String by lazy {
+        Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
     }
 
     // Last known WiFi BSSID - when it changes, we refresh device info
@@ -215,11 +220,25 @@ class HomeViewModel @Inject constructor(
             is ActivityIntent.SelectBottomTab -> {
                 _state.update { it.copy(selectedBottomTabIndex = intent.index) }
             }
+            is ActivityIntent.UpdateDeviceName -> {
+                _state.update { it.copy(deviceName = intent.name) }
+                viewModelScope.launch {
+                    val deviceId = getDeviceId()
+                    repository.updateAlias(deviceId, intent.name)
+                }
+            }
             ActivityIntent.RefreshData -> {
-                // User manually requested refresh (pull-to-refresh or retry) – ask BatteryService to run getDeviceInfo
+                // User manually requested refresh – check permission, location, WiFi; then run getDeviceInfo
                 Log.d(HOME_LOG, "📥 Manual refresh requested")
-                _state.update { it.copy(isLoading = true, error = null) }
-                sendRequestGetDeviceInfo()
+                val refreshError = getManualRefreshBlockingError()
+                if (refreshError != null) {
+                    Log.w(HOME_LOG, "Manual refresh blocked: $refreshError")
+                    _state.update { it.copy(isLoading = false, error = refreshError) }
+                    viewModelScope.launch { _effect.send(ActivityEffect.ShowToast(refreshError)) }
+                } else {
+                    _state.update { it.copy(isLoading = true, error = null) }
+                    sendRequestGetDeviceInfo()
+                }
             }
             ActivityIntent.CheckLocationStatus -> {
                 checkLocationAndLoadDeviceInfo()
@@ -249,10 +268,6 @@ class HomeViewModel @Inject constructor(
                     loadCachedOrDefaultDeviceInfo()
                 }
             }
-            ActivityIntent.ShowWifiError, ActivityIntent.DismissWifiError,
-            ActivityIntent.OpenLocationSettings, ActivityIntent.OpenWifiSettings -> {
-                // Handled by UI layer - these are navigation/actions that don't need VM processing
-            }
         }
     }
     
@@ -266,7 +281,12 @@ class HomeViewModel @Inject constructor(
         val locationEnabled = isLocationEnabled()
         val wifiConnected = isWiFiConnected()
         val skipped = _state.value.locationRequestSkipped
-        _state.update { it.copy(isLoading = true, error = null) }
+        val hasExistingData = _state.value.deviceInfo != null
+        // Only show full-screen loading when we don't have data yet (initial load). When returning from
+        // App Theme / About / Settings we already have deviceInfo; avoid flashing loading.
+        if (!hasExistingData) {
+            _state.update { it.copy(isLoading = true, error = null) }
+        }
         if (wifiConnected && locationEnabled) {
             // Service already runs getDeviceInfo on start and on WiFi/location changes; just load from cache.
             viewModelScope.launch {
@@ -285,7 +305,9 @@ class HomeViewModel @Inject constructor(
             }
         } else if (wifiConnected) {
             if (!skipped) {
-                _state.update { it.copy(showLocationEnableDialog = true) }
+                _state.update { it.copy(showLocationEnableDialog = true, isLocationEnabled = false) }
+            } else {
+                _state.update { it.copy(isLocationEnabled = false) }
             }
             viewModelScope.launch {
                 yield()
@@ -293,7 +315,7 @@ class HomeViewModel @Inject constructor(
             }
         } else {
             Log.d(HOME_LOG, "No WiFi - loading from local DB or creating default")
-            _state.update { it.copy(wifiAddress = null) }
+            _state.update { it.copy(wifiAddress = null, isLocationEnabled = false) }
             viewModelScope.launch {
                 yield()
                 loadCachedOrDefaultDeviceInfo(setLocationSkipped = true)
@@ -312,6 +334,24 @@ class HomeViewModel @Inject constructor(
             val ni = cm.activeNetworkInfo
             ni?.type == ConnectivityManager.TYPE_WIFI && ni.isConnected
         }
+    }
+
+    /**
+     * Validates conditions for manual refresh (pull-to-refresh / Try Again).
+     * Returns an error message to show if refresh cannot proceed, or null if all checks pass.
+     */
+    private fun getManualRefreshBlockingError(): String? {
+        val context = getApplication<Application>()
+        if (!PermissionUtils.hasRequiredPermissions(context)) {
+            return "Location and notification permissions are required to refresh. Please enable them in app settings."
+        }
+        if (!isLocationEnabled()) {
+            return "Please enable Location (GPS) to refresh device data."
+        }
+        if (!isWiFiConnected()) {
+            return "Wi‑Fi is required to sync. Please connect to Wi‑Fi and try again."
+        }
+        return null
     }
 
     /**
@@ -346,7 +386,8 @@ class HomeViewModel @Inject constructor(
                 isLoading = false,
                 error = null,
                 locationRequestSkipped = setLocationSkipped,
-                deviceName = friendlyDeviceName,
+                deviceName = deviceInfo.alias?.takeIf { it.isNotBlank() } ?: friendlyDeviceName,
+                deviceManufacturer = deviceManufacturer,
                 publicName = deviceInfo.alias ?: ""
             )
         }
@@ -557,6 +598,7 @@ class HomeViewModel @Inject constructor(
         _state.update {
             it.copy(
                 deviceName = friendlyDeviceName,
+                deviceManufacturer = deviceManufacturer,
                 isWifiConnected = isWiFiConnected(),
                 wifiAddress = preferenceManager.getLastWifiBssid(),
                 locationRequestSkipped = preferenceManager.getLocationRequestSkipped()
@@ -602,7 +644,8 @@ class HomeViewModel @Inject constructor(
                         climateData = mappedClimate,
                         isLoading = false,
                         error = null,
-                        deviceName = friendlyDeviceName,
+                        deviceName = cachedDeviceInfo.alias?.takeIf { it.isNotBlank() } ?: friendlyDeviceName,
+                        deviceManufacturer = deviceManufacturer,
                         publicName = cachedDeviceInfo.alias ?: ""
                     )
                 }

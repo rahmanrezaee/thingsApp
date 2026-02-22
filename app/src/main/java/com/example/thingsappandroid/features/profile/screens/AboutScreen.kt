@@ -6,51 +6,79 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.activity.ComponentActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.thingsappandroid.BuildConfig
 import com.example.thingsappandroid.features.home.viewModel.HomeViewModel
-import com.example.thingsappandroid.ui.components.BackButtonTopBar
 import com.example.thingsappandroid.features.profile.components.ProfileListItem
+import com.example.thingsappandroid.features.profile.viewModel.ExportBatteryDataViewModel
+import com.example.thingsappandroid.features.profile.viewModel.ExportState
+import com.example.thingsappandroid.ui.components.BackButtonTopBar
 import com.example.thingsappandroid.ui.theme.Shapes
+import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
-private const val PRIVACY_POLICY_URL = "https://example.com/privacy"
-private const val TERMS_URL = "https://example.com/terms"
+private const val PRIVACY_POLICY_URL = "https://climatein.umweltify.com/thingsapp/privacy"
+private const val TERMS_URL = "https://climatein.umweltify.com/thingsapp/terms"
 
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
     activityViewModel: HomeViewModel = hiltViewModel(
         viewModelStoreOwner = LocalContext.current as ComponentActivity
-    )
+    ),
+    exportViewModel: ExportBatteryDataViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
     val state = activityViewModel.state.collectAsStateWithLifecycle()
+    val exportState by exportViewModel.exportState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    LaunchedEffect(exportState) {
+        when (val s = exportState) {
+            is ExportState.Success -> {
+                Toast.makeText(context, s.message, Toast.LENGTH_SHORT).show()
+                exportViewModel.resetState()
+            }
+            is ExportState.Error -> {
+                Toast.makeText(context, s.message, Toast.LENGTH_LONG).show()
+                exportViewModel.resetState()
+            }
+            else -> {}
+        }
+    }
+
     val deviceInfo = state.value.deviceInfo
     val deviceId = deviceInfo?.deviceId ?: "—"
     val deviceName = state.value.deviceName
@@ -61,22 +89,45 @@ fun AboutScreen(
         wifiAddress
     }
     val version = BuildConfig.VERSION_NAME.ifBlank { "1.0" }
+    AboutScreenContent(
+        onBack = onBack,
+        deviceName = deviceName.ifBlank { "—" },
+        deviceId = deviceId,
+        greenFiValue = greenFiValue,
+        version = version,
+        exportState = exportState,
+        onExport = { exportViewModel.exportData() }
+    )
+}
 
+@Composable
+private fun AboutScreenContent(
+    onBack: () -> Unit,
+    deviceName: String,
+    deviceId: String,
+    greenFiValue: String,
+    version: String,
+    exportState: ExportState,
+    onExport: () -> Unit
+) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background) .statusBarsPadding()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
     ) {
         BackButtonTopBar(title = "About", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
+                .weight(1f)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             AboutIdRow(
                 label = "Device",
-                value = deviceName.ifBlank { "—" },
+                value = deviceName,
                 onCopy = {
                     copyToClipboard(context, "Device", deviceName)
                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
@@ -112,7 +163,43 @@ fun AboutScreen(
                 label = "Terms of Use",
                 onClick = { openUrl(context, TERMS_URL) }
             )
+            
             Spacer(modifier = Modifier.height(24.dp))
+            
+            // Export Section
+            Text(
+                text = "Reports",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onExport,
+                enabled = exportState !is ExportState.Loading,
+                modifier = Modifier.fillMaxWidth(),
+                shape = Shapes.medium
+            ) {
+                if (exportState is ExportState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Export Charging Report (CSV)")
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
             Text(
                 text = "Umweltify ThingsApp $version",
                 style = MaterialTheme.typography.titleMedium.copy(
@@ -122,7 +209,7 @@ fun AboutScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Copyright © 2025",
+                text = "Copyright © 2026",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -183,4 +270,42 @@ private fun copyToClipboard(context: Context, label: String, text: String) {
 private fun openUrl(context: Context, url: String) {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
     context.startActivity(intent)
+}
+
+
+
+@Preview(showBackground = true, name = "About Screen (Light)")
+@Composable
+private fun AboutScreenLightPreview() {
+    ThingsAppAndroidTheme(darkTheme = false) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            AboutScreenContent(
+                onBack = {},
+                deviceName = "Pixel 8 Pro",
+                deviceId = "abc-123-device-uuid",
+                greenFiValue = "There is no Green-Fi connected.",
+                version = "1.0",
+                exportState = ExportState.Idle,
+                onExport = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "About Screen (Dark)")
+@Composable
+private fun AboutScreenDarkPreview() {
+    ThingsAppAndroidTheme(darkTheme = true) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            AboutScreenContent(
+                onBack = {},
+                deviceName = "Pixel 8 Pro",
+                deviceId = "abc-123-device-uuid",
+                greenFiValue = "green-fi-456-address",
+                version = "1.0",
+                exportState = ExportState.Idle,
+                onExport = {}
+            )
+        }
+    }
 }

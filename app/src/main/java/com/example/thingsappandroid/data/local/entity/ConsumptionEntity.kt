@@ -12,5 +12,13 @@ data class ConsumptionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val modelJson: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Upload state for this aggregated record. */
+    val uploadStatus: String = "PENDING",
+    /** Set when the record is successfully uploaded. */
+    val uploadedAt: Long? = null,
+    /** Last error message if upload failed. */
+    val lastUploadError: String? = null,
+    /** Optional server measurementId (if returned). */
+    val measurementId: String? = null
 )

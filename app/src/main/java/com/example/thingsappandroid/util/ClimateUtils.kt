@@ -39,7 +39,7 @@ object ClimateUtils {
     private val alignedData = ClimateData(
         title = "1.5°C Aligned",
         description = "Within carbon budget. Switch to green electricity if possible.",
-        gradientColors = listOf(Color(0xFFDA9A21), Color(0xFFB57D0C))
+        gradientColors = listOf(Color(0xFFF6B935),Color(0xFFB57D0C))
     )
 
     /** ClientStatus mapping: 0,1,2,3,4 = Not green; 5,6,7,9 = Green; 8 = 1.5°C Aligned. */

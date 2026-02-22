@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +31,7 @@ import com.example.thingsappandroid.features.profile.viewModel.ThemeViewModel
 import com.example.thingsappandroid.ui.theme.ThemeMode
 import com.example.thingsappandroid.ui.components.BackButtonTopBar
 import com.example.thingsappandroid.ui.theme.Shapes
+import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 
 @Composable
 fun AppThemeScreen(
@@ -38,8 +40,20 @@ fun AppThemeScreen(
 ) {
     val themeModeState = viewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
     val themeMode = themeModeState.value
-    val colorScheme = MaterialTheme.colorScheme
+    AppThemeScreenContent(
+        onBack = onBack,
+        themeMode = themeMode,
+        onThemeModeSelected = { viewModel.setThemeMode(it) }
+    )
+}
 
+@Composable
+private fun AppThemeScreenContent(
+    onBack: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeSelected: (ThemeMode) -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -56,21 +70,21 @@ fun AppThemeScreen(
             ThemeOptionRow(
                 label = "System Default",
                 selected = themeMode == ThemeMode.System,
-                onClick = { viewModel.setThemeMode(ThemeMode.System) },
+                onClick = { onThemeModeSelected(ThemeMode.System) },
                 colorScheme = colorScheme
             )
             Spacer(modifier = Modifier.height(5.dp))
             ThemeOptionRow(
                 label = "Light",
                 selected = themeMode == ThemeMode.Light,
-                onClick = { viewModel.setThemeMode(ThemeMode.Light) },
+                onClick = { onThemeModeSelected(ThemeMode.Light) },
                 colorScheme = colorScheme
             )
             Spacer(modifier = Modifier.height(5.dp))
             ThemeOptionRow(
                 label = "Dark",
                 selected = themeMode == ThemeMode.Dark,
-                onClick = { viewModel.setThemeMode(ThemeMode.Dark) },
+                onClick = { onThemeModeSelected(ThemeMode.Dark) },
                 colorScheme = colorScheme
             )
         }
@@ -115,5 +129,29 @@ private fun ThemeOptionRow(
                 )
             )
         }
+    }
+}
+
+@Preview(showBackground = true, name = "App Theme (Light)")
+@Composable
+private fun AppThemeScreenLightPreview() {
+    ThingsAppAndroidTheme(darkTheme = false) {
+        AppThemeScreenContent(
+            onBack = {},
+            themeMode = ThemeMode.System,
+            onThemeModeSelected = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "App Theme (Dark)")
+@Composable
+private fun AppThemeScreenDarkPreview() {
+    ThingsAppAndroidTheme(darkTheme = true) {
+        AppThemeScreenContent(
+            onBack = {},
+            themeMode = ThemeMode.Dark,
+            onThemeModeSelected = {}
+        )
     }
 }

@@ -32,7 +32,8 @@ fun ComingSoonScreen(
     title: String,
     description: String,
     buttonText: String? = null,
-    onButtonClick: (() -> Unit)? = null
+    onButtonClick: (() -> Unit)? = null,
+    logoResId: Int? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.background == Gray900
@@ -48,21 +49,30 @@ fun ComingSoonScreen(
     ) {
         Spacer(modifier = Modifier.weight(1f))
 
-        Image(
-            painter = painterResource(id = R.drawable.logo),
-            contentDescription = "ThingsApp Logo",
-            modifier = Modifier.size(100.dp),
-            contentScale = ContentScale.Fit
-        )
+        if (logoResId != null) {
+            Image(
+                painter = painterResource(id = logoResId),
+                contentDescription = null,
+                modifier = Modifier.size(100.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "ThingsApp Logo",
+                modifier = Modifier.size(100.dp),
+                contentScale = ContentScale.Fit
+            )
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-        Image(
-            painter = painterResource(id = logoNameRes),
-            contentDescription = "ThingsApp",
-            modifier = Modifier.width(110.dp),
-            contentScale = ContentScale.Fit
-        )
+            Image(
+                painter = painterResource(id = logoNameRes),
+                contentDescription = "ThingsApp",
+                modifier = Modifier.width(110.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 

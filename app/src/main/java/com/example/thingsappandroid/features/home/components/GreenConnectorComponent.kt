@@ -34,7 +34,7 @@ fun GreenConnectorComponent(
     val statusColor = when {
         isConnected && isGreen -> ActivityGreen
         isConnected && !isGreen -> ErrorRed
-        else -> colorScheme.onSurfaceVariant
+        else -> colorScheme.outlineVariant
     }
     val iconCircleBackground = colorScheme.surfaceContainerHighest
 
@@ -56,10 +56,24 @@ fun GreenConnectorComponent(
                     .size(26.dp)
                     .clip(CircleShape)
                     .background(statusColor)
-                    .border(1.dp, statusColor, CircleShape),
+                    .border(.5.dp, colorScheme.background, CircleShape)
+                    .padding(1.dp)
+                .clip(CircleShape)
+                .background(statusColor)
+                .border(1.dp, statusColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                 WifiBadgeIcon(tint = if (isConnected) Color.White else Color(0xFFA3A3A3))
+                val isDark = MaterialTheme.colorScheme.background == Gray900
+
+
+                WifiBadgeIcon(
+                    tint = when {
+                        isConnected -> Color.White
+                        isDark -> Gray800
+                        else -> Gray400
+                    }
+                )
+
             }
         }
 
@@ -68,7 +82,7 @@ fun GreenConnectorComponent(
         val text = when {
             !isWifiConnected -> "No Station"
             !isConnected -> "No GreenFi\nConnected"
-            stationInfo?.stationName != null && stationInfo.stationName.isNotBlank() -> "${stationInfo.stationName}\nConnected"
+            stationInfo.stationName != null && stationInfo.stationName.isNotBlank() -> "${stationInfo.stationName}\nConnected"
             else -> "GreenFi\nConnected"
         }
 
@@ -114,6 +128,16 @@ fun GreenConnectorComponentPreview() {
                 utilityName = null,
                 wifiAddress = null
             )
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun GreenConnectorComponentNOWIFIPreview() {
+    ThingsAppAndroidTheme {
+        GreenConnectorComponent(
+
         )
     }
 }

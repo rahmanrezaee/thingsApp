@@ -77,10 +77,14 @@ class ThingsRepository(
                 val wifiAddress = WifiUtils.getHashedWiFiBSSID(context)
                 val (latitude, longitude) = LocationUtils.getLocationCoordinates(context) ?: Pair(0.0, 0.0)
 
+                val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                val model = Build.MODEL
+                val deviceFriendlyName = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+
                 val registerResponse = api.registerDevice(
                     RegisterDeviceRequest(
                         deviceId = deviceId,
-                        name = "Android Device",
+                        name = deviceFriendlyName,
                         make = Build.MANUFACTURER,
                         model = Build.MODEL,
                         os = "Android ${Build.VERSION.RELEASE}",

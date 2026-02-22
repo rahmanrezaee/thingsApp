@@ -16,32 +16,41 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.components.PrimaryButton
+import com.example.thingsappandroid.ui.theme.Gray300
+import com.example.thingsappandroid.ui.theme.Gray800
 import com.example.thingsappandroid.ui.theme.Gray900
 import com.example.thingsappandroid.ui.theme.PrimaryGreen
 import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
@@ -53,7 +62,12 @@ fun SplashScreen(
     onBackgroundLocationSkip: () -> Unit = {},
     hasRequiredPermissions: Boolean = true,
     onGrantPermissions: () -> Unit = {},
-    hasBackgroundLocation: Boolean = false
+    onSkipPermissions: () -> Unit = {},
+    hasNotificationPermission: Boolean = true,
+    hasForegroundLocationPermission: Boolean = true,
+    hasBackgroundLocation: Boolean = false,
+    onRequestNotificationPermission: () -> Unit = {},
+    onRequestLocationPermission: () -> Unit = {}
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Box(
@@ -84,133 +98,92 @@ fun SplashScreen(
                     modifier = Modifier.width(180.dp),
                     contentScale = ContentScale.Fit
                 )
+                Spacer(modifier = Modifier.weight(0.05f))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp)
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "ThingsApp by Umweltify",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
-                    )
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.weight(0.2f))
             }
         } else {
-            // Permission request screen - no logo for more space
+            // Permission request screen - toggles reflect actual permission state
+            val notificationEnabled = hasNotificationPermission
+            val locationEnabled = hasForegroundLocationPermission && hasBackgroundLocation
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.Start
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Header icon
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .background(
-                            color = PrimaryGreen.copy(alpha = 0.1f),
-                            shape = MaterialTheme.shapes.large
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = PrimaryGreen
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Title
-                Text(
-                    text = "Required Permissions",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Subtitle
-                Text(
-                    text = "ThingsApp needs two permissions to work:",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Permission cards - modern design
-                PermissionCard(
-                    icon = Icons.Default.LocationOn,
-                    title = "Location",
-                    subtitle = "\"Allow all the time\"",
-                    description = "Track charging sessions and WiFi-based green energy"
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                PermissionCard(
-                    icon = Icons.Default.Notifications,
-                    title = "Notifications",
-                    subtitle = "Allow",
-                    description = "Get real-time updates on your carbon footprint"
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Instructions card
-                Card(
+                // Close icon - skip permissions and proceed
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = PrimaryGreen.copy(alpha = 0.08f)
-                    ),
-                    shape = MaterialTheme.shapes.large,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text = "How to grant permissions:",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        InstructionStep(
-                            number = "1",
-                            text = "Tap \"Continue\" and grant location when asked"
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        InstructionStep(
-                            number = "2",
-                            text = "In Settings, choose \"Allow all the time\" for Location"
+                    IconButton(
+                        onClick = onSkipPermissions,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Skip",
+                            tint = colorScheme.onSurface
                         )
                     }
                 }
-                
+                Spacer(modifier = Modifier.height(15.dp))
+
+                // Title
+                Text(
+                    text = "Enable Access for a Better Experience.",
+                    style = MaterialTheme.typography.headlineLarge,
+                    textAlign = TextAlign.Center,
+                    color = colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Continue button
-                PrimaryButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "Continue",
-                    onClick = onGrantPermissions
+                // Notification section - toggle reflects permission; turning on requests permission
+                PermissionToggleRow(
+                    title = "Notification",
+                    description = "Receive real-time updates on your device's climate status, green rewards, and sustainability tips.",
+                    checked = notificationEnabled,
+                    onCheckedChange = { if (it) onRequestNotificationPermission() }
                 )
-                
-                Spacer(modifier = Modifier.height(16.dp))
+
+                HorizontalDivider(
+                    color = if (colorScheme.background == Gray900) Gray800 else Gray300,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+
+                // Enable Location section - only enabled after Notification is granted (second phase)
+                PermissionToggleRow(
+                    title = "Enable Location",
+                    description = if (notificationEnabled) "Help us calculate your device's energy carbon footprint accurately and provide personalized green recommendations." else "Enable Notification first to enable Location.",
+                    checked = locationEnabled,
+                    onCheckedChange = { if (it) onRequestLocationPermission() },
+                    enabled = notificationEnabled
+                )
+
+
             }
         }
     }
 
-    // Background location permission dialog - MANDATORY (permission only, not "enable location")
+    // Background location permission dialog - can be dismissed or cancelled
     if (showBackgroundLocationDialog) {
         AlertDialog(
-            onDismissRequest = { /* Prevent dismissal - permission is mandatory */ },
+            onDismissRequest = onBackgroundLocationSkip,
             icon = {
                 Box(
                     modifier = Modifier
@@ -232,7 +205,7 @@ fun SplashScreen(
             title = {
                 Text(
                     "One more step",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineSmall,
                     color = colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -250,36 +223,13 @@ fun SplashScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Spacer(modifier = Modifier.height(20.dp))
-                    
-                    // Benefits
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = PrimaryGreen.copy(alpha = 0.08f)
-                        ),
-                        shape = MaterialTheme.shapes.medium,
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "This enables:",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            BenefitRow("Track charging sessions automatically")
-                            BenefitRow("Monitor WiFi-based green energy")
-                            BenefitRow("Accurate carbon footprint data")
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(20.dp))
-                    
+
                     // Instructions
                     Text(
                         "How to do it:",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleSmall,
                         color = colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -291,23 +241,86 @@ fun SplashScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = onBackgroundLocationOpenSettings,
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen),
-                    shape = MaterialTheme.shapes.medium
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        "Open Settings",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Button(
+                        onClick = onBackgroundLocationOpenSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Text(
+                            "Open Settings",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                    TextButton(
+                        onClick = onBackgroundLocationSkip,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Cancel",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
             dismissButton = null,
             properties = DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true
             )
+        )
+    }
+}
+
+@Composable
+private fun PermissionToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        // Row 1: Title and Switch
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) colorScheme.onSurface else colorScheme.onSurfaceVariant
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = colorScheme.onPrimary,
+                    checkedTrackColor = PrimaryGreen,
+                    uncheckedThumbColor = colorScheme.outline,
+                    uncheckedTrackColor = colorScheme.surfaceContainerHighest
+                )
+            )
+        }
+        // Row 2: Body/description
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
         )
     }
 }
@@ -358,19 +371,19 @@ private fun PermissionCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleSmall,
                     color = colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.labelMedium,
                     color = PrimaryGreen
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                    style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.onSurfaceVariant
                 )
             }
@@ -399,7 +412,7 @@ private fun InstructionStep(
         ) {
             Text(
                 text = number,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimary
             )
         }
@@ -408,7 +421,7 @@ private fun InstructionStep(
         
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
@@ -442,10 +455,21 @@ private fun BenefitRow(text: String) {
     }
 }
 
-// Preview composables
-@Preview(showBackground = true, showSystemUi = true)
+// Preview composables (showSystemUi omitted to avoid "Cannot add a null child view to a ViewGroup" in preview)
+@Preview(showBackground = true)
 @Composable
 private fun SplashScreenPermissionPreview() {
+    ThingsAppAndroidTheme(true) {
+        SplashScreen(
+            hasRequiredPermissions = false,
+            hasBackgroundLocation = false,
+            onGrantPermissions = {}
+        )
+    }
+}
+@Preview(showBackground = true)
+@Composable
+private fun SplashScreenLightPermissionPreview() {
     ThingsAppAndroidTheme {
         SplashScreen(
             hasRequiredPermissions = false,
@@ -455,7 +479,7 @@ private fun SplashScreenPermissionPreview() {
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true)
 @Composable
 private fun SplashScreenLoadingPreview() {
     ThingsAppAndroidTheme {
@@ -485,7 +509,7 @@ private fun BackgroundLocationDialogPreview() {
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true)
 @Composable
 private fun SplashScreenLogoPreviewLight() {
     ThingsAppAndroidTheme(darkTheme = false) {
@@ -496,7 +520,7 @@ private fun SplashScreenLogoPreviewLight() {
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true)
 @Composable
 private fun SplashScreenLogoPreviewDark() {
     ThingsAppAndroidTheme(darkTheme = true) {

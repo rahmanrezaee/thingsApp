@@ -12,6 +12,7 @@ data class HomeState(
     val hasBatteryData: Boolean = false, // Tracks if we've received real battery data
     val batteryCapacityMwh: Int? = null, // Battery capacity in mWh
     val deviceName: String = "",
+    val deviceManufacturer: String = "",
     val publicName: String = "",
 
     // Device Info from API
@@ -51,10 +52,7 @@ data class HomeState(
     /** Current hashed WiFi BSSID (Green-Fi Unique Identifier). null when no WiFi / not available. */
     val wifiAddress: String? = null,
     val isOfflineMode: Boolean = false,
-    val wifiErrorReason: String? = null,
-    val wifiErrorDetails: String? = null,
-    val showWifiErrorDialog: Boolean = false,
-    
+
     // Location
     val isLocationEnabled: Boolean = false,
     val showLocationEnableDialog: Boolean = false,
@@ -91,13 +89,8 @@ sealed class ActivityIntent {
     object OpenCarbonIntensityMetricSheet : ActivityIntent()
     object DismissCarbonIntensityMetricSheet : ActivityIntent()
     data class SelectBottomTab(val index: Int) : ActivityIntent()
-    
-    // WiFi Error Dialog
-    object ShowWifiError : ActivityIntent()
-    object DismissWifiError : ActivityIntent()
-    object OpenLocationSettings : ActivityIntent()
-    object OpenWifiSettings : ActivityIntent()
-    
+    data class UpdateDeviceName(val name: String) : ActivityIntent()
+
     // Location Check
     object CheckLocationStatus : ActivityIntent()
     object LocationEnabled : ActivityIntent()

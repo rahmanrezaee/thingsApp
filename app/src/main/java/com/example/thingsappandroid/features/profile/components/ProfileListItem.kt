@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.thingsappandroid.ui.theme.Gray100
 import com.example.thingsappandroid.ui.theme.Shapes
 
 /**
@@ -62,7 +64,9 @@ fun ProfileListItem(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = colorScheme.onSurface,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 16.sp,
+                        lineHeight = 18.sp
                     )
                 )
             }

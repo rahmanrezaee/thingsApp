@@ -93,6 +93,15 @@
             android:enabled="true"
             android:exported="false" />
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Required: set your sentry.io project identifier (DSN) -->
     <meta-data android:name="io.sentry.dsn" android:value="https://a997e0dd8a9a495ae5a74755cc762050@o4507145257025536.ingest.de.sentry.io/4510749854400592" />

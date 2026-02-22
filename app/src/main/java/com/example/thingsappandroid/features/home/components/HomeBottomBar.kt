@@ -1,6 +1,8 @@
 package com.example.thingsappandroid.features.home.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -28,7 +30,7 @@ fun HomeBottomBar(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Column {
-        HorizontalDivider(color = colorScheme.outlineVariant, thickness = 1.dp)
+        HorizontalDivider(color = colorScheme.surfaceContainerHighest, thickness = 1.dp)
         NavigationBar(
             containerColor = colorScheme.surface,
             contentColor = colorScheme.onSurfaceVariant,
@@ -38,7 +40,7 @@ fun HomeBottomBar(
                 BottomNavData("Home", R.drawable.ic_nav_home_filled, R.drawable.ic_nav_home, 0),
                 BottomNavData("ClimateIn", R.drawable.ic_nav_activity, R.drawable.ic_nav_activity_outline, 1),
                 BottomNavData("Marketplace", R.drawable.ic_nav_shop_filled, R.drawable.ic_nav_shop_outline, 2),
-                BottomNavData("Profile", R.drawable.ic_nav_profile_filled, R.drawable.ic_nav_profile, 3)
+                BottomNavData("Device", R.drawable.ic_nav_profile_filled, R.drawable.ic_nav_profile, 3)
             )
 
             items.forEach { item ->
@@ -48,20 +50,22 @@ fun HomeBottomBar(
                 NavigationBarItem(
                     selected = isSelected,
                     onClick = { onTabSelected(item.index) },
+                    modifier = Modifier.padding(0.dp),
                     icon = {
                         Icon(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
-                            tint = if (isSelected) ActivityGreen else colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
+                            tint = if (isSelected) ActivityGreen else colorScheme.outline,
+                            modifier = Modifier.size(24.dp)
                         )
                     },
                     label = {
                         Text(
                             text = item.label,
+                            modifier = Modifier.offset(y = (-4).dp),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp
+                                fontSize = 12.sp
                             )
                         )
                     },
@@ -69,8 +73,8 @@ fun HomeBottomBar(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = ActivityGreen,
                         selectedTextColor = ActivityGreen,
-                        unselectedIconColor = colorScheme.onSurfaceVariant,
-                        unselectedTextColor = colorScheme.onSurfaceVariant,
+                        unselectedIconColor = colorScheme.outline,
+                        unselectedTextColor = colorScheme.outline,
                         indicatorColor = Color.Transparent
                     )
                 )

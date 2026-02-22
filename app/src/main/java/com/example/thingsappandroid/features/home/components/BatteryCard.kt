@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.thingsappandroid.ui.theme.*
 import java.text.NumberFormat
 import java.util.Locale
@@ -32,13 +33,18 @@ fun BatteryCard(
 
             Column(
                 modifier = Modifier
-                    .padding(16.dp)
+                    .padding(vertical = 12.dp, horizontal = 16.dp)
                     .fillMaxSize()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column {
                     Text(
                         text = "Electricity",
-                        style = MaterialTheme.typography.titleMedium.copy(color = colorScheme.onSurface)
+                        style = MaterialTheme.typography.titleMedium
+                            .copy(
+                                color = colorScheme.onSurface,
+                                fontSize = 16.sp,
+                                lineHeight = 18.sp
+                            )
                     )
                     Text(
                         text = batteryCapacityMwh?.let { capacity ->
@@ -62,14 +68,14 @@ fun BatteryCard(
                         level = batteryLevel,
                         isAnimating = isCharging,
                         colorStart = BatteryGradientStart,
-                        colorEnd = BatteryGradientEnd
+                        colorEnd = BatteryGradientEnd,
+                        waveDurationMs = 6000
                     )
+
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = if (hasValidData) "${(batteryLevel * 100).toInt()}%" else "--",
                             style = MaterialTheme.typography.titleLarge.copy(
@@ -102,6 +108,15 @@ fun BatteryCard(
 @Composable
 fun BatteryCardPreview() {
     ThingsAppAndroidTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            BatteryCard(modifier = Modifier.width(164.dp))
+        }
+    }
+}
+@Preview(showBackground = true)
+@Composable
+fun BatteryCardPreviewDark() {
+    ThingsAppAndroidTheme(true) {
         Box(modifier = Modifier.padding(16.dp)) {
             BatteryCard(modifier = Modifier.width(164.dp))
         }

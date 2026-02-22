@@ -3,11 +3,13 @@ package com.example.thingsappandroid.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Brand Colors
-val PrimaryGreen = Color(0xFF39B54A)
+//val PrimaryGreen = Color(0xFF39B54A)
+
+val PrimaryGreen = Color(0xFF497D00)
 val DarkGreen = Color(0xFF009444)
 val Orange15C = Color(0xFFEE8C00)  // 1.5°C Aligned lightning icon
 val NotGreenRed = Color(0xFFD32F2F) // Not Green lightning icon
-val SecondaryGreen = Color(0xFFEBF9ED)
+val SecondaryGreen = Color(0xFFF7FEE7)
 val ActivityGreen = Color(0xFF5EA500)
 val BatteryYellow = Color(0xFFEEA811)
 val LogoYellow = Color(0xFFD7DF23)
@@ -19,11 +21,16 @@ val GreenFiGradientStart = Color(0xFF00AA45)
 val GreenFiGradientEnd = Color(0xFFD3FF33)
 
 // Grays
+
+
+
 val Gray900 = Color(0xFF1E1E1E)
 val Gray800 = Color(0xFF262626)
 val Gray700 = Color(0xFF404040)
 val Gray600 = Color(0xFF525252)
 val Gray500 = Color(0xFF737373)
+
+
 val Gray400 = Color(0xFFA3A3A3)
 val Gray300 = Color(0xFFD4D4D4)
 val Gray200 = Color(0xFFE5E5E5)

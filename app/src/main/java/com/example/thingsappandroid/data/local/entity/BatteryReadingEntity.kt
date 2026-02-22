@@ -20,5 +20,11 @@ data class BatteryReadingEntity(
     val startTime: Long,
     val endTime: Long,
     val temperature: Int? = null,
-    val health: Int? = null
+    val health: Int? = null,
+    /** Upload state for the aggregated session this reading belongs to. */
+    val uploadStatus: String = "PENDING",
+    /** Set when the session is successfully uploaded. */
+    val uploadedAt: Long? = null,
+    /** Last error message if upload failed. */
+    val lastUploadError: String? = null
 )

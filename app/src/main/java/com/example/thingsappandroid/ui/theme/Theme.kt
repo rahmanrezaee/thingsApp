@@ -21,6 +21,8 @@ private val LightColorScheme = lightColorScheme(
     surface = BackgroundWhite,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
+    surfaceContainerHighest = Gray100,
+    outlineVariant = Gray200,
     error = ErrorRed
 )
 
@@ -33,9 +35,9 @@ private val DarkColorScheme = darkColorScheme(
     surface = Gray900,
     onBackground = Color.White,
     onSurface = Color.White,
-    onSurfaceVariant = Gray400,
+    onSurfaceVariant = Gray500,
     surfaceContainerHighest = Gray800,
-    outline = Gray600,
+    outline = Gray400,
     outlineVariant = Gray700,
     error = ErrorRed
 )

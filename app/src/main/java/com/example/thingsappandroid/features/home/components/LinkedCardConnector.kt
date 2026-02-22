@@ -21,16 +21,23 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.thingsappandroid.ui.theme.Gray600
+import com.example.thingsappandroid.ui.theme.Gray700
+import com.example.thingsappandroid.ui.theme.Gray900
 
 // =================================================================================================
 // SECTION: CONFIGURATION (COLORS)
 // =================================================================================================
-private val ColorBackgroundStroke = Color(0xFFE5E5E5) // The static gray pipe
-private val ColorCapFill = Color(0xFFD4D4D4)        // The static gray caps
-private val ColorFlow = Color(0xFF7CCF00)           // The moving green energy
-private val ColorCarbonFlow = Color(0xFF333333)     // The moving dark carbon energy
+private val ColorBackgroundStrokeLight = Color(0xFFE5E5E5)
+private val ColorCapFillLight = Color(0xFFD4D4D4)
+private val ColorBackgroundStrokeDark = Gray600
+private val ColorCapFillDark = Gray700
+private val ColorFlow = Color(0xFF7CCF00)
+private val ColorCarbonFlowLight = Color(0xFF333333)
+private val ColorCarbonFlowDark = Color(0xFF999999)
 
 @Composable
 fun LinkedCardConnector(
@@ -78,6 +85,11 @@ private fun ConnectorGraphic(
     isGreen: Boolean = false
 ) {
     val density = LocalDensity.current
+    val colorScheme = MaterialTheme.colorScheme
+    val isDark = colorScheme.background == Gray900
+    val pipeColor = if (isDark) ColorBackgroundStrokeDark else ColorBackgroundStrokeLight
+    val capColor = if (isDark) ColorCapFillDark else ColorCapFillLight
+    val carbonFlowColor = if (isDark) ColorCarbonFlowDark else ColorCarbonFlowLight
 
     // =============================================================================================
     // SECTION: ANIMATION ENGINE
@@ -101,7 +113,7 @@ private fun ConnectorGraphic(
             // =====================================================================================
 
             // Visual Settings
-            val strokeWidth = 6.dp.toPx()  // Pipe Thickness
+            val strokeWidth = 5.dp.toPx()  // Pipe Thickness
             val capWidth = 16.dp.toPx()    // Cap Width
             val capHeight = 8.dp.toPx()    // Cap Height
             val cornerRadius = 8.dp.toPx() // Pipe Bend Radius
@@ -113,10 +125,6 @@ private fun ConnectorGraphic(
             val yLegStart = 30.dp.toPx()
             val yBottom = size.height
             
-            // Offset for energy flow to stop under topContent (not at the very top)
-            // Use ySplit as the minimum stop point to ensure flow ends well below topContent
-            val flowStopOffset = ySplit + capHeight + 2.dp.toPx() // Stop flow well below top
-
             // Layout Landmarks (X-Axis)
             val gapPx = 15.dp.toPx()
             val cardWidth = (size.width - gapPx) / 2
@@ -238,32 +246,31 @@ private fun ConnectorGraphic(
 
             onDrawBehind {
                 // 1. Draw The Pipe (Static) - always show both pipes
-                drawPath(leftPath, ColorBackgroundStroke, style = Stroke(width = strokeWidth))
-                drawPath(rightPath, ColorBackgroundStroke, style = Stroke(width = strokeWidth))
+                drawPath(leftPath, pipeColor, style = Stroke(width = strokeWidth))
+                drawPath(rightPath, pipeColor, style = Stroke(width = strokeWidth))
 
                 // 2. Draw The Caps (Static)
-                drawPath(topCap, ColorCapFill)
-                drawPath(bottomLeftCap, ColorCapFill)
-                drawPath(bottomRightCap, ColorCapFill)
+                drawPath(topCap, capColor)
+                drawPath(bottomLeftCap, capColor)
+                drawPath(bottomRightCap, capColor)
 
                 // 3. Draw The Energy (Animation) - when green, only disable right energy flow (pipe stays visible)
                 val segmentLength = 20f
 
                 fun drawFlow(measure: PathMeasure, length: Float, flowColor: Color = ColorFlow) {
-                    // Calculate the maximum distance the flow can reach (stop well before top)
-                    // Ensure flow stops below topContent by using the full flowStopOffset
-                    val effectiveLength = (length - flowStopOffset).coerceAtLeast(0f)
-                    
-                    val distance = (1f - progress) * (effectiveLength + segmentLength) // Reversed flow: bottom to top
-                    val start = (distance - segmentLength).coerceAtLeast(0f)
-                    val end = distance.coerceAtMost(effectiveLength)
+                    val totalTravel = length + segmentLength
+                    val tailPos = length - progress * totalTravel
+                    val headPos = tailPos - segmentLength
 
-                    if (start < effectiveLength && end > 0f) {
+                    val segStart = headPos.coerceIn(0f, length)
+                    val segEnd = tailPos.coerceIn(0f, length)
+
+                    if (segEnd > segStart) {
                         val segmentPath = Path()
-                        measure.getSegment(start, end, segmentPath, true)
+                        measure.getSegment(segStart, segEnd, segmentPath, true)
 
-                        val startPos = measure.getPosition(start)
-                        val endPos = measure.getPosition(end)
+                        val startPos = measure.getPosition(segStart)
+                        val endPos = measure.getPosition(segEnd)
 
                         drawPath(
                             segmentPath,
@@ -278,17 +285,12 @@ private fun ConnectorGraphic(
                     }
                 }
 
-                drawFlow(leftMeasure, leftLength, ColorFlow) // Green energy flow for battery
+                drawFlow(leftMeasure, leftLength, ColorFlow)
                 if (!isGreen) {
-                    drawFlow(rightMeasure, rightLength, ColorCarbonFlow) // Right energy flow: only disabled when green; pipe and cap stay visible
+                    drawFlow(rightMeasure, rightLength, carbonFlowColor)
                 }
 
-                // 4. Draw The Pulse (Cap Fill Effect) - Reversed flow: bottom to top
-                // Flow stops before reaching top, so cap animation should also stop earlier
-                // Since flow stops at flowStopOffset from top, cap should never animate
-                // (cap is at the very top, flow never reaches it)
-                // Therefore, we disable the top cap animation entirely
-                // The static gray cap will remain visible, but no animated fill
+                // 4. Caps are drawn as filled shapes on top, hiding flow endpoints
             }
         }
     )
@@ -318,7 +320,7 @@ fun LinkedCardConnectorPreview() {
         },
         bottomContentRight = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CarbonCard(currentUsage = 102f)
+                CarbonCard(remainingBudget = 102f, totalBudget = 500f)
                 CarbonConnectionLine(height = 54.dp, isCharging = true,)
                 LowCarbonComponent()
 

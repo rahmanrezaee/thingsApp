@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Image
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.painterResource
 import com.example.thingsappandroid.R
 import com.example.thingsappandroid.ui.theme.*
@@ -29,25 +30,30 @@ fun BatteryLiquidIndicator(
     level: Float,
     isAnimating: Boolean,
     colorStart: Color,
-    colorEnd: Color
+    colorEnd: Color,
+    hasWave: Boolean = isAnimating,
+    waveDurationMs: Int = 2000
 ) {
+    val isDark = MaterialTheme.colorScheme.background == Gray900
+    val outlineColor = if (isDark) Gray300 else Color(0xFF404040)
     val infiniteTransition = rememberInfiniteTransition(label = "LiquidWave")
-    val phase by infiniteTransition.animateFloat(
+    val animatedPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(waveDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "Phase"
     )
+    val phase = if (isAnimating || hasWave) animatedPhase else 0f
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val strokeWidth = 1.8.dp.toPx()
         val halfStroke = strokeWidth / 2
-        val innerPadding = 3.dp.toPx() // Gap between outline and liquid fill
+        val innerPadding = 3.dp.toPx()
 
         val capWidth = 12.dp.toPx()
         val capHeight = 3.5.dp.toPx()
@@ -62,7 +68,6 @@ fun BatteryLiquidIndicator(
         )
         val bodyCornerRadius = CornerRadius(6.dp.toPx())
 
-        // Inner fill area (inset from the outline)
         val fillBounds = Rect(
             left = bodyBounds.left + innerPadding,
             top = bodyBounds.top + innerPadding,
@@ -83,7 +88,7 @@ fun BatteryLiquidIndicator(
                 val liquidPath = Path()
                 liquidPath.moveTo(fillBounds.left, fillBounds.bottom)
 
-                val waveAmplitude = if (isAnimating) 1.5.dp.toPx() else 0f
+                val waveAmplitude = if (hasWave) 1.5.dp.toPx() else 0f
                 val freq = (2 * PI / fillBounds.width).toFloat()
                 val steps = 100
                 val stepX = fillBounds.width / steps
@@ -116,8 +121,6 @@ fun BatteryLiquidIndicator(
             }
         }
 
-        val outlineColor = Color(0xFF404040)
-
         // Cap (centered, rounded)
         val capLeft = (w - capWidth) / 2
         drawRoundRect(
@@ -143,6 +146,9 @@ fun CarbonBatteryIcon(
     modifier: Modifier = Modifier,
     level: Float // 0f to 1f
 ) {
+    val isDark = MaterialTheme.colorScheme.background == Gray900
+    val carbonOutlineColor = if (isDark) Gray300 else Color(0xFF1E1E1E)
+    val carbonFillColor = if (isDark) Gray300 else Color(0xFF1E1E1E)
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -182,19 +188,17 @@ fun CarbonBatteryIcon(
             }
             clipPath(fillClipPath) {
                 drawRect(
-                    color = Color(0xFF1E1E1E),
+                    color = carbonFillColor,
                     topLeft = Offset(fillBounds.left, fillBounds.bottom - fillHeight),
                     size = Size(fillBounds.width, fillHeight)
                 )
             }
         }
 
-        val outlineColor = Color(0xFF1E1E1E)
-
         // Cap (centered, rounded)
         val capLeft = (w - capWidth) / 2
         drawRoundRect(
-            color = outlineColor,
+            color = carbonOutlineColor,
             topLeft = Offset(capLeft, halfStroke),
             size = Size(capWidth, capHeight),
             cornerRadius = CornerRadius(capCorner)
@@ -202,7 +206,7 @@ fun CarbonBatteryIcon(
 
         // Body Outline
         drawRoundRect(
-            color = outlineColor,
+            color = carbonOutlineColor,
             topLeft = bodyBounds.topLeft,
             size = bodyBounds.size,
             cornerRadius = bodyCornerRadius,
