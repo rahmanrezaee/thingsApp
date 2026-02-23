@@ -5,8 +5,9 @@ import android.os.BatteryManager
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
-import com.example.thingsappandroid.services.utils.ConsumptionTracker
+import com.example.thingsappandroid.services.utils.BatteryConsumptionTracker
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Inject
 
 /**
@@ -14,7 +15,13 @@ import javax.inject.Inject
  * Provided by DI; used by BatteryService.
  */
 interface ConsumptionTrackerFactory {
-    fun create(deviceId: String, batteryManager: BatteryManager): ConsumptionTracker
+    fun create(
+        deviceId: String,
+        batteryManager: BatteryManager,
+        scope: CoroutineScope,
+        getChargeState: () -> BatteryState?,
+        getFreshBatteryState: () -> BatteryState?
+    ): BatteryConsumptionTracker
 }
 
 /**
@@ -23,8 +30,14 @@ interface ConsumptionTrackerFactory {
 class ConsumptionTrackerFactoryImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ConsumptionTrackerFactory {
-    override fun create(deviceId: String, batteryManager: BatteryManager): ConsumptionTracker =
-        ConsumptionTracker(context, deviceId, batteryManager)
+    override fun create(
+        deviceId: String,
+        batteryManager: BatteryManager,
+        scope: CoroutineScope,
+        getChargeState: () -> BatteryState?,
+        getFreshBatteryState: () -> BatteryState?
+    ): BatteryConsumptionTracker =
+        BatteryConsumptionTracker(context, deviceId, batteryManager, scope, getChargeState, getFreshBatteryState)
 }
 
 /**

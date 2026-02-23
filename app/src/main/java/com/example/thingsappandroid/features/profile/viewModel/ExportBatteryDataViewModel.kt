@@ -28,11 +28,16 @@ sealed class ExportState {
     data class Error(val message: String) : ExportState()
 }
 
-data class ExportData(
-    val deviceId: String,
-    val exportedAt: String,
-    val rawReadings: List<com.example.thingsappandroid.data.local.entity.BatteryReadingEntity>,
-    val pendingConsumptions: List<com.example.thingsappandroid.data.local.entity.ConsumptionEntity>
+/**
+ * Export item representing one charging session group summary.
+ */
+data class ExportGroupSummary(
+    val group: String,
+    val totalWattHours: Double,
+    val startTime: String,
+    val endTime: String,
+    val startLevel: Int,
+    val endLevel: Int
 )
 
 @HiltViewModel
@@ -49,20 +54,24 @@ class ExportBatteryDataViewModel @Inject constructor(
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
     /**
-     * Legacy method used by AboutScreen to trigger a JSON export and share it.
+     * Export charging report as JSON and share. Optional [fromMillis]/[toMillis] filter by time range.
      */
-    fun exportData() {
+    fun exportData(fromMillis: Long? = null, toMillis: Long? = null) {
         viewModelScope.launch {
             _exportState.value = ExportState.Loading
             try {
                 val jsonContent = withContext(Dispatchers.IO) {
-                    generateJson()
+                    generateJson(fromMillis, toMillis)
+                }
+
+                if (jsonContent.isBlank()) {
+                    _exportState.value = ExportState.Error("No data found to export")
+                    return@launch
                 }
 
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                 val fileName = "charging_report_$timestamp.json"
                 val file = File(application.cacheDir, fileName)
-                
                 withContext(Dispatchers.IO) {
                     file.writeText(jsonContent)
                 }
@@ -96,12 +105,12 @@ class ExportBatteryDataViewModel @Inject constructor(
     /**
      * Exports JSON to a user-provided URI (Storage Access Framework).
      */
-    fun exportToUri(uri: Uri) {
+    fun exportToUri(uri: Uri, fromMillis: Long? = null, toMillis: Long? = null) {
         viewModelScope.launch {
             _exportState.value = ExportState.Loading
             try {
                 val jsonContent = withContext(Dispatchers.IO) {
-                    generateJson()
+                    generateJson(fromMillis, toMillis)
                 }
                 
                 withContext(Dispatchers.IO) {
@@ -118,30 +127,34 @@ class ExportBatteryDataViewModel @Inject constructor(
     }
 
     @SuppressLint("HardwareIds")
-    private suspend fun generateJson(): String {
+    private suspend fun generateJson(fromMillis: Long? = null, toMillis: Long? = null): String {
         val deviceId = android.provider.Settings.Secure.getString(
-            application.contentResolver, 
+            application.contentResolver,
             android.provider.Settings.Secure.ANDROID_ID
         ) ?: "unknown"
-        
+
         val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.getDefault()).format(Date())
-        
-        val allReadings = mutableListOf<com.example.thingsappandroid.data.local.entity.BatteryReadingEntity>()
-        val groups = readingDao.getAllGroupIds()
-        groups.forEach { groupId ->
-            allReadings.addAll(readingDao.getByGroup(groupId))
+        val readableFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+        val groups = if (fromMillis != null && toMillis != null) {
+            readingDao.getGroupedBatteryDataBetween(fromMillis, toMillis)
+        } else {
+            readingDao.getGroupedBatteryData()
         }
 
-        val pendings = consumptionDao.getAllPendingOnce()
-        
-        val exportData = ExportData(
-            deviceId = deviceId,
-            exportedAt = timestamp,
-            rawReadings = allReadings,
-            pendingConsumptions = pendings
-        )
+        // Top-level JSON array: one item per groupId (no duplicates)
+        val summaries: List<ExportGroupSummary> = groups.map {
+            ExportGroupSummary(
+                group = it.groupId,
+                totalWattHours = it.totalWattHours,
+                startTime = readableFormat.format(Date(it.startTime)),
+                endTime = readableFormat.format(Date(it.endTime)),
+                startLevel = it.startLevel,
+                endLevel = it.endLevel
+            )
+        }
 
-        return gson.toJson(exportData)
+        return gson.toJson(summaries)
     }
 
     fun resetState() {

@@ -41,21 +41,32 @@ object BatteryUtil {
     }
 
     /**
-     * Converts battery current (in microamperes) to amperes
+     * Converts battery current (in microamperes or milliamperes) to amperes
      * Handles device-specific issues:
+     * - Most devices report in microamperes (µA)
+     * - Some devices (e.g., Sony, certain Samsung models) report in milliamperes (mA)
      * - Xiaomi devices report the sign incorrectly, so we invert it
-     * - Conversion: microamperes / 1,000,000 = amperes
      */
     fun getBatteryCurrentNowInAmperes(currentNow: Int): Double {
         if (currentNow == Int.MIN_VALUE || currentNow == 0) {
             return 0.0
         }
         
-        // Convert microamperes to amperes: divide by 1,000,000
-        var currentAmperes = currentNow / 1_000_000.0
+        val absCurrent = Math.abs(currentNow)
+        // Heuristic: If value is > 50,000, it's almost certainly microamperes (µA)
+        // If it's < 10,000, it's likely milliamperes (mA)
+        // Standard phone charging is 500mA - 5000mA (0.5A - 5A)
+        // In µA: 500,000 - 5,000,000
+        // In mA: 500 - 5,000
+        val isMicroAmperes = absCurrent > 10_000
+
+        var currentAmperes = if (isMicroAmperes) {
+            currentNow / 1_000_000.0
+        } else {
+            currentNow / 1_000.0
+        }
         
         // Xiaomi devices report the sign incorrectly (inverted)
-        // So we need to invert the sign for Xiaomi devices
         if (Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)) {
             currentAmperes = -currentAmperes
         }

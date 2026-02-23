@@ -8,6 +8,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.thingsappandroid.BuildConfig
@@ -53,6 +60,13 @@ import com.example.thingsappandroid.ui.theme.ThingsAppAndroidTheme
 private const val PRIVACY_POLICY_URL = "https://climatein.umweltify.com/thingsapp/privacy"
 private const val TERMS_URL = "https://climatein.umweltify.com/thingsapp/terms"
 
+private val EXPORT_RANGE_1H = 1L * 60 * 60 * 1000
+private val EXPORT_RANGE_2H = 2L * 60 * 60 * 1000
+private val EXPORT_RANGE_5H = 5L * 60 * 60 * 1000
+private val EXPORT_RANGE_1D = 24L * 60 * 60 * 1000
+private val EXPORT_RANGE_1W = 7L * 24 * 60 * 60 * 1000
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
@@ -79,6 +93,7 @@ fun AboutScreen(
         }
     }
 
+    var showExportSheet by remember { mutableStateOf(false) }
     val deviceInfo = state.value.deviceInfo
     val deviceId = deviceInfo?.deviceId ?: "—"
     val deviceName = state.value.deviceName
@@ -96,8 +111,24 @@ fun AboutScreen(
         greenFiValue = greenFiValue,
         version = version,
         exportState = exportState,
-        onExport = { exportViewModel.exportData() }
+        onExportClick = { showExportSheet = true }
     )
+    if (showExportSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        @OptIn(ExperimentalMaterial3Api::class)
+        ModalBottomSheet(
+            onDismissRequest = { showExportSheet = false },
+            sheetState = sheetState
+        ) {
+            ExportRangeBottomSheetContent(
+                onDismiss = { showExportSheet = false },
+                onExportRange = { fromMillis, toMillis ->
+                    exportViewModel.exportData(fromMillis, toMillis)
+                    showExportSheet = false
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -108,7 +139,7 @@ private fun AboutScreenContent(
     greenFiValue: String,
     version: String,
     exportState: ExportState,
-    onExport: () -> Unit
+    onExportClick: () -> Unit
 ) {
     val context = LocalContext.current
     Column(
@@ -176,7 +207,7 @@ private fun AboutScreenContent(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = onExport,
+                onClick = onExportClick,
                 enabled = exportState !is ExportState.Loading,
                 modifier = Modifier.fillMaxWidth(),
                 shape = Shapes.medium
@@ -194,7 +225,7 @@ private fun AboutScreenContent(
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export Charging Report (CSV)")
+                    Text("Export Charging Report (JSON)")
                 }
             }
 
@@ -215,6 +246,53 @@ private fun AboutScreenContent(
                 )
             )
             Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExportRangeBottomSheetContent(
+    onDismiss: () -> Unit,
+    onExportRange: (fromMillis: Long, toMillis: Long) -> Unit
+) {
+    val now = System.currentTimeMillis()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        Text(
+            text = "Export charging report",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        listOf(
+            "Last 1 hour" to EXPORT_RANGE_1H,
+            "Last 2 hours" to EXPORT_RANGE_2H,
+            "Last 5 hours" to EXPORT_RANGE_5H,
+            "Last 1 day" to EXPORT_RANGE_1D,
+            "Last 1 week" to EXPORT_RANGE_1W
+        ).forEach { (label, rangeMs) ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable {
+                        onExportRange(now - rangeMs, now)
+                        onDismiss()
+                    },
+                shape = Shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }
@@ -286,7 +364,7 @@ private fun AboutScreenLightPreview() {
                 greenFiValue = "There is no Green-Fi connected.",
                 version = "1.0",
                 exportState = ExportState.Idle,
-                onExport = {}
+                onExportClick = {}
             )
         }
     }
@@ -304,7 +382,7 @@ private fun AboutScreenDarkPreview() {
                 greenFiValue = "green-fi-456-address",
                 version = "1.0",
                 exportState = ExportState.Idle,
-                onExport = {}
+                onExportClick = {}
             )
         }
     }

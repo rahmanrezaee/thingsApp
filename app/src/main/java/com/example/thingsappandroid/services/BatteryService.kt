@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -19,9 +20,9 @@ import com.example.thingsappandroid.MainActivity
 import com.example.thingsappandroid.data.local.PreferenceManager
 import com.example.thingsappandroid.data.local.TokenManager
 import com.example.thingsappandroid.data.repository.ThingsRepository
-import com.example.thingsappandroid.services.utils.ClimateStatusManager
-import com.example.thingsappandroid.services.utils.ConsumptionTracker
+import com.example.thingsappandroid.services.utils.BatteryConsumptionTracker
 import com.example.thingsappandroid.services.utils.BatteryNotificationHelper
+import com.example.thingsappandroid.services.utils.ClimateStatusManager
 import com.example.thingsappandroid.util.LocationUtils
 import com.example.thingsappandroid.util.NetworkUtils
 import com.example.thingsappandroid.util.WifiUtils
@@ -86,7 +87,7 @@ class BatteryService : Service() {
     private var stationCodeShownThisSession = false
 
     /** Created in onCreate from factories (need runtime deviceId). */
-    private lateinit var consumptionTracker: ConsumptionTracker
+    private lateinit var consumptionTracker: BatteryConsumptionTracker
     private lateinit var deviceInfoApi: BatteryServiceDeviceInfoApi
     private lateinit var notificationHandler: BatteryServiceNotificationHandler
     private lateinit var internalBroadcastReceiver: BroadcastReceiver
@@ -116,7 +117,7 @@ class BatteryService : Service() {
     // -------------------------------------------------------------------------
 
     private suspend fun runStopTracking(level: Int, voltage: Int) {
-        consumptionTracker.stopTracking(level, voltage)
+        consumptionTracker.stopChargingSessionAndUpload()
     }
 
     private suspend fun handleBatteryIntent(intent: Intent) {
@@ -186,13 +187,8 @@ class BatteryService : Service() {
         if (chargeState == null) chargeState = state
         groupId = java.util.UUID.randomUUID().toString()
         Log.d("BatteryService", "runStartConsumptionIfChargingAndNotStarted: starting consumption, groupId=$groupId")
-        consumptionTracker.startTracking(groupId!!, state.level, state.voltage)
-        BatteryServiceConsumptionHandler.startPeriodicConsumptionReports(
-            serviceScope,
-            { chargeState },
-            { BatteryServiceBatteryHandler.getCurrentBatteryState(applicationContext) },
-            consumptionTracker
-        )
+        // Start 10s recording loop while charging.
+        consumptionTracker.startChargingSessionIfNeeded()
     }
 
     private suspend fun runSetClimateStatusIfReady(climateStatusIntent: Intent?) {
@@ -202,13 +198,20 @@ class BatteryService : Service() {
         val charging = isCharging()
         val apiLevel = Build.VERSION.SDK_INT
         val stationCode = climateStatusIntent?.getStringExtra(BatteryServiceActions.EXTRA_STATION_CODE)
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val isPowerSaveMode = pm.isPowerSaveMode
 
-        Log.d("BatteryService", "runSetClimateStatusIfReady: hasInternet=$hasInternet, locationReady=$locationReady, isCharging=$charging, apiLevel=$apiLevel, stationCode=${stationCode?.take(4)?.let { "$it***" } ?: "null"}")
+        Log.d("BatteryService", "runSetClimateStatusIfReady: hasInternet=$hasInternet, locationReady=$locationReady, isCharging=$charging, apiLevel=$apiLevel, isPowerSaveMode=$isPowerSaveMode, stationCode=${stationCode?.take(4)?.let { "$it***" } ?: "null"}")
 
         notificationHandler.cancelStationCodeNotification()
         stationCodeShownThisSession = false
 
-        if (hasInternet && locationReady && charging && apiLevel >= Build.VERSION_CODES.R) {
+        if (isPowerSaveMode) {
+            Log.d("BatteryService", "runSetClimateStatusIfReady: Device is in Power Save / Ultra Low Battery mode. Keeping service alive but skipping intensive tasks.")
+            // You could also call a notification update here to show "Eco mode active"
+        }
+
+        if (hasInternet && locationReady && charging && apiLevel >= Build.VERSION_CODES.R && !isPowerSaveMode) {
             try {
                 Log.d("BatteryService", "runSetClimateStatusIfReady: calling climateStatusManager.handleChargingStarted")
                 val climateStatus = climateStatusManager.handleChargingStarted(
@@ -305,8 +308,6 @@ class BatteryService : Service() {
             if (shouldShowStationCode) {
                 notificationHandler.maybeShowStationCodeNotificationOnce()
             }
-
-            BatteryServiceConsumptionHandler.syncPendingConsumptions(consumptionTracker)
             }
         }
     }
@@ -326,7 +327,13 @@ class BatteryService : Service() {
             deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
                 ?: java.util.UUID.randomUUID().toString()
 
-            consumptionTracker = consumptionTrackerFactory.create(deviceId, batteryManager)
+            consumptionTracker = consumptionTrackerFactory.create(
+                deviceId,
+                batteryManager,
+                serviceScope,
+                { chargeState },
+                { BatteryServiceBatteryHandler.getCurrentBatteryState(applicationContext) }
+            )
 
             notificationHandler = BatteryServiceNotificationHandler(
                 this,
@@ -382,6 +389,23 @@ class BatteryService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d("BatteryService", "onTaskRemoved: App swiped away, restarting service in 1s")
+        val restartServiceIntent = Intent(applicationContext, this.javaClass)
+        restartServiceIntent.setPackage(packageName)
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartServiceIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmService.set(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + 1000,
+            restartServicePendingIntent
+        )
+    }
 
     // -------------------------------------------------------------------------
     // Lifecycle: onStartCommand — show notification, register receiver, run online/offline flow
@@ -474,15 +498,13 @@ class BatteryService : Service() {
             var consecutiveMisses = 0
             while (true) {
                 delay(2000)
-                if (!isCharging()) {
-                    consecutiveMisses = 0
-                    continue
-                }
+                // Always monitor when the service should be running (STICKY)
                 val ourNotificationVisible = notificationManager.activeNotifications
                     .any { it.id == ids.NOTIFICATION_ID }
                 if (!ourNotificationVisible) {
                     consecutiveMisses++
                     if (consecutiveMisses >= 2) {
+                        Log.d("BatteryService", "Notification missing, recreating...")
                         notificationHandler.recreateForegroundNotification()
                         consecutiveMisses = 0
                     }

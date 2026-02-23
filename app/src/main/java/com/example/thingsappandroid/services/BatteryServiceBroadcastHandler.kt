@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.net.wifi.WifiManager
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
 /**
@@ -32,7 +33,8 @@ object BatteryServiceBroadcastHandler {
                 BatteryServiceActions.REQUEST_GET_DEVICE_INFO -> onRequestGetDeviceInfo()
                 Intent.ACTION_BATTERY_CHANGED, Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> receivedIntent?.let { onBatteryIntent(it) }
                 WifiManager.NETWORK_STATE_CHANGED_ACTION, WifiManager.WIFI_STATE_CHANGED_ACTION, ConnectivityManager.CONNECTIVITY_ACTION,
-                android.location.LocationManager.PROVIDERS_CHANGED_ACTION, android.location.LocationManager.MODE_CHANGED_ACTION -> onConnectivityAction(receivedIntent)
+                android.location.LocationManager.PROVIDERS_CHANGED_ACTION, android.location.LocationManager.MODE_CHANGED_ACTION,
+                PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> onConnectivityAction(receivedIntent)
             }
         }
     }
@@ -49,6 +51,7 @@ object BatteryServiceBroadcastHandler {
         addAction(ConnectivityManager.CONNECTIVITY_ACTION)
         addAction(android.location.LocationManager.PROVIDERS_CHANGED_ACTION)
         addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
+        addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
     }
 
     /**
