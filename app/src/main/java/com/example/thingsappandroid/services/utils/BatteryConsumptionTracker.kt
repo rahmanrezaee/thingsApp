@@ -183,7 +183,7 @@ class BatteryConsumptionTracker(
                 totalWatt = avgWatts,
                 totalWattHours = totalWh,
                 averageAmpere = avgAmpere,
-                averageVoltage = avgVoltage,
+                averageVoltage = avgVoltage / 1000,
                 intervalSeconds = intervalSeconds,
                 totalSamples = totalSamples,
                 sourceType = sourceType,
