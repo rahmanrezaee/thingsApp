@@ -71,7 +71,11 @@ data class AddDeviceConsumptionBody(
     val isGreen: Boolean? = null,
     val climateStatus: Int? = null,
     val location: Location? = null,
-    val isVerifiedAsGreen: Boolean? = null
+    val isVerifiedAsGreen: Boolean? = null,
+    val averageAmpere: Double? = null,
+    val averageVoltage: Double? = null,
+    val interval: Int? = null,
+    val totalSamples: Int? = null
 )
 
 /** Internal model for pending storage (keeps latitude/longitude). */

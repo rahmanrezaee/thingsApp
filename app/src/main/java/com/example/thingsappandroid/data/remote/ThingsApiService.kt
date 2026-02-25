@@ -76,7 +76,12 @@ interface ThingsApiService {
     @POST("/v4/androidapp/adddeviceconsumption")
     suspend fun addDeviceConsumption(@Body body: AddDeviceConsumptionBody): Response<MeasurementResponse>
 
-    /** Batch: request [ body, ... ], response { "success": true } */
+    /**
+     * Batch: request [ body, ... ].
+     *
+     * API currently returns an empty array `[]` on success (not an object), so we treat
+     * success by HTTP status code rather than by parsing a JSON body.
+     */
     @POST("/v4/androidapp/adddeviceconsumptionrange")
-    suspend fun addDeviceConsumptionRange(@Body request: List<AddDeviceConsumptionBody>): Response<BasicResponse>
+    suspend fun addDeviceConsumptionRange(@Body request: List<AddDeviceConsumptionBody>): Response<ResponseBody>
 }

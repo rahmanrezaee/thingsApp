@@ -1,10 +1,13 @@
 package com.example.thingsappandroid.util
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 
 object BatteryUtil {
@@ -107,6 +110,28 @@ object BatteryUtil {
         return convertMahToMwh(capacityMah)
     }
     
+    /**
+     * Checks if the app is ignoring battery optimizations.
+     */
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        } else {
+            true
+        }
+    }
+
+    /**
+     * Returns an intent to request ignoring battery optimizations.
+     */
+    @SuppressLint("BatteryLife")
+    fun getIgnoreBatteryOptimizationsIntent(context: Context): Intent {
+        return Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = android.net.Uri.parse("package:${context.packageName}")
+        }
+    }
+
     /**
      * Data class holding battery information
      */

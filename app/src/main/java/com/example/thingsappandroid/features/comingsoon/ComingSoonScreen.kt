@@ -50,17 +50,19 @@ fun ComingSoonScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         if (logoResId != null) {
+
             Image(
                 painter = painterResource(id = logoResId),
-                contentDescription = null,
-                modifier = Modifier.size(100.dp),
-                contentScale = ContentScale.Fit
+                contentDescription = "ThingsApp Logo",
+                modifier = Modifier.width(200.dp),
+//                contentScale = ContentScale.Fit
             )
+
         } else {
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "ThingsApp Logo",
-                modifier = Modifier.size(100.dp),
+                modifier = Modifier.width(100.dp),
                 contentScale = ContentScale.Fit
             )
 

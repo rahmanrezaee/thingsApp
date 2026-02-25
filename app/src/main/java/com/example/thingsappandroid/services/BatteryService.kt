@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import com.example.thingsappandroid.util.BatteryUtil
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -116,9 +117,7 @@ class BatteryService : Service() {
     // Broadcast handling: battery + WiFi/location → update state and notification
     // -------------------------------------------------------------------------
 
-    private suspend fun runStopTracking(level: Int, voltage: Int) {
-        consumptionTracker.stopChargingSessionAndUpload()
-    }
+
 
     private suspend fun handleBatteryIntent(intent: Intent) {
         val action = intent.action
@@ -155,7 +154,7 @@ class BatteryService : Service() {
             stationCodeShownThisSession = false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Log.d("BatteryService", "handleBatteryIntent: stopping consumption tracking level=${result.level} voltage=${result.voltage}")
-                runStopTracking(result.level, result.voltage)
+                consumptionTracker.stopChargingSessionAndUpload()
             }
             groupId = null
             notificationHandler.updateNotification()    
@@ -350,6 +349,11 @@ class BatteryService : Service() {
 
             deviceInfoApi = deviceInfoApiFactory.create(deviceId, { notificationHandler.updateNotification() }, { isCharging() })
 
+            val isIgnoring = BatteryUtil.isIgnoringBatteryOptimizations(this)
+            Log.d("BatteryService", "onCreate: isIgnoringBatteryOptimizations=$isIgnoring")
+            if (!isIgnoring) {
+                Log.w("BatteryService", "onCreate: App is NOT ignoring battery optimizations. This may lead to service termination.")
+            }
 
             Log.d("BatteryService", "onCreate the createReceiver")
             internalBroadcastReceiver = BatteryServiceBroadcastHandler.createReceiver(
@@ -389,6 +393,39 @@ class BatteryService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val levelName = when (level) {
+            TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
+            TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
+            TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
+            TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
+            TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
+            TRIM_MEMORY_MODERATE -> "MODERATE"
+            TRIM_MEMORY_COMPLETE -> "COMPLETE"
+            else -> "UNKNOWN($level)"
+        }
+        Log.w("BatteryService", "onTrimMemory: Level $levelName. System is under memory pressure!")
+        
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            Log.w("BatteryService", "onTrimMemory: Critical pressure, reducing footprint.")
+        }
+    }
+
+    override fun onDestroy() {
+        Log.e("BatteryService", "onDestroy: Service is being destroyed!")
+        super.onDestroy()
+        try {
+            if (receiverRegistered) {
+                BatteryServiceBroadcastHandler.unregisterReceiver(this, internalBroadcastReceiver)
+                receiverRegistered = false
+            }
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+        }
+        serviceScope.cancel()
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
@@ -513,18 +550,5 @@ class BatteryService : Service() {
                 }
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            if (receiverRegistered) {
-                BatteryServiceBroadcastHandler.unregisterReceiver(this, internalBroadcastReceiver)
-                receiverRegistered = false
-            }
-        } catch (e: Exception) {
-            Sentry.captureException(e)
-        }
-        serviceScope.cancel()
     }
 }

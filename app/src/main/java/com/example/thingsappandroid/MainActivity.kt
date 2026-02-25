@@ -42,6 +42,19 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import io.sentry.Sentry
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import com.example.thingsappandroid.util.BatteryUtil
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -248,8 +261,72 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavigation()
                     GlobalMessageHost()
+                    
+                    // Show battery optimization prompt if needed
+                    BatteryOptimizationPrompt()
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun BatteryOptimizationPrompt() {
+        var showPrompt by remember { mutableStateOf(false) }
+        val context = LocalView.current.context
+
+        // Check status when app starts/resumes
+        LaunchedEffect(Unit) {
+            if (!BatteryUtil.isIgnoringBatteryOptimizations(context) && 
+                preferenceManager.isOnboardingCompleted()) {
+                showPrompt = true
+            }
+        }
+
+        if (showPrompt) {
+            AlertDialog(
+                onDismissRequest = { showPrompt = false },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.BatteryAlert,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Keep App Running?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = "To ensure battery tracking works during games and low battery, please allow the app to always run in the background.",
+                        textAlign = TextAlign.Center
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showPrompt = false
+                            try {
+                                context.startActivity(BatteryUtil.getIgnoreBatteryOptimizationsIntent(context))
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Failed to start battery optimization intent", e)
+                            }
+                        }
+                    ) {
+                        Text("Allow")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPrompt = false }) {
+                        Text("Later")
+                    }
+                }
+            )
         }
     }
 

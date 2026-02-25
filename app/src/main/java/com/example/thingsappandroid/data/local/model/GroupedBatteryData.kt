@@ -9,5 +9,6 @@ data class GroupedBatteryData(
     val startTime: Long,
     val endTime: Long,
     val startLevel: Int,
-    val endLevel: Int
+    val endLevel: Int,
+    val uploadStatus: String
 )

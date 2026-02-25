@@ -197,39 +197,39 @@ private fun AboutScreenContent(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Export Section
-            Text(
-                text = "Reports",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium
-                )
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = onExportClick,
-                enabled = exportState !is ExportState.Loading,
-                modifier = Modifier.fillMaxWidth(),
-                shape = Shapes.medium
-            ) {
-                if (exportState is ExportState.Loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export Charging Report (JSON)")
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
+//            // Export Section
+//            Text(
+//                text = "Reports",
+//                style = MaterialTheme.typography.labelMedium.copy(
+//                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+//                    fontWeight = FontWeight.Medium
+//                )
+//            )
+//            Spacer(modifier = Modifier.height(8.dp))
+//            Button(
+//                onClick = onExportClick,
+//                enabled = exportState !is ExportState.Loading,
+//                modifier = Modifier.fillMaxWidth(),
+//                shape = Shapes.medium
+//            ) {
+//                if (exportState is ExportState.Loading) {
+//                    CircularProgressIndicator(
+//                        modifier = Modifier.size(24.dp),
+//                        color = MaterialTheme.colorScheme.onPrimary,
+//                        strokeWidth = 2.dp
+//                    )
+//                } else {
+//                    Icon(
+//                        imageVector = Icons.Default.Download,
+//                        contentDescription = null,
+//                        modifier = Modifier.size(20.dp)
+//                    )
+//                    Spacer(modifier = Modifier.width(8.dp))
+//                    Text("Export Charging Report (JSON)")
+//                }
+//            }
+//
+//            Spacer(modifier = Modifier.weight(1f))
 
             Text(
                 text = "Umweltify ThingsApp $version",

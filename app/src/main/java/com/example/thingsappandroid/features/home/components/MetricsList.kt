@@ -61,7 +61,7 @@ fun MetricsList(
         MetricItem(
             icon = Icons.Rounded.Public,
             label = "Avoided CO₂ Emissions",
-            value = String.format("%.2f gCO₂e", avoidedEmissions),
+            value = String.format("%.2f gCO₂e",  avoidedEmissions * 1000f),
             onClick = onAvoidedEmissionsClick,
             colorScheme = colorScheme
         )

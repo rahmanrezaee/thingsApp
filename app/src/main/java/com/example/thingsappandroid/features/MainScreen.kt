@@ -161,7 +161,7 @@ fun MainScreen(
                             onButtonClick = {
                                 uriHandler.openUri("https://climate-in.com/")
                             },
-                            logoResId = R.drawable.ic_nav_activity
+                            logoResId = R.drawable.climatein
                         )
 
                         2 -> ComingSoonScreen(
@@ -272,5 +272,20 @@ private fun FullScreenLoading() {
 private fun PreviewFullScreenLoading() {
     ThingsAppAndroidTheme {
         FullScreenLoading()
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewCommingSoon() {
+    ThingsAppAndroidTheme {
+        ComingSoonScreen(
+            title = "Explore ClimateIn on the Web",
+            description = "Browse green apps, track your impact, and unlock climate rewards — all from our full-featured web platform.",
+            buttonText = "Visit ClimateIn",
+            onButtonClick = {
+            },
+            logoResId = R.drawable.climatein
+        )
     }
 }

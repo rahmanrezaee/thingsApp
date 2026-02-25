@@ -37,7 +37,21 @@ data class ExportGroupSummary(
     val startTime: String,
     val endTime: String,
     val startLevel: Int,
-    val endLevel: Int
+    val endLevel: Int,
+    val uploadStatus: String,
+    val items: List<ExportBatteryReading>
+)
+
+/**
+ * Detailed reading item within a group.
+ */
+data class ExportBatteryReading(
+    val startTime: String,
+    val endTime: String,
+    val voltage: Int,
+    val current: Double,
+    val duration: String,
+    val watt: Double
 )
 
 @HiltViewModel
@@ -49,7 +63,6 @@ class ExportBatteryDataViewModel @Inject constructor(
     val exportState = _exportState.asStateFlow()
 
     private val database = AppDatabase.getInstance(application)
-    private val readingDao = database.batteryReadingDao()
     private val consumptionDao = database.consumptionDao()
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
@@ -128,29 +141,36 @@ class ExportBatteryDataViewModel @Inject constructor(
 
     @SuppressLint("HardwareIds")
     private suspend fun generateJson(fromMillis: Long? = null, toMillis: Long? = null): String {
-        val deviceId = android.provider.Settings.Secure.getString(
-            application.contentResolver,
-            android.provider.Settings.Secure.ANDROID_ID
-        ) ?: "unknown"
-
-        val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.getDefault()).format(Date())
         val readableFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
-        val groups = if (fromMillis != null && toMillis != null) {
-            readingDao.getGroupedBatteryDataBetween(fromMillis, toMillis)
+        val consumptions = if (fromMillis != null && toMillis != null) {
+            consumptionDao.getConsumptionsBetween(fromMillis, toMillis)
         } else {
-            readingDao.getGroupedBatteryData()
+            consumptionDao.getAllConsumptions()
         }
 
-        // Top-level JSON array: one item per groupId (no duplicates)
-        val summaries: List<ExportGroupSummary> = groups.map {
+        val summaries: List<ExportGroupSummary> = consumptions.map { consumption ->
+            val readings = consumptionDao.getItemsForConsumption(consumption.id)
+            val items = readings.map { r ->
+                val durationSec = (r.endTime - r.startTime) / 1000.0
+                ExportBatteryReading(
+                    startTime = readableFormat.format(Date(r.startTime)),
+                    endTime = readableFormat.format(Date(r.endTime)),
+                    voltage = r.voltage,
+                    current = r.ampere,
+                    duration = String.format("%.1fs", durationSec),
+                    watt = r.watt
+                )
+            }
             ExportGroupSummary(
-                group = it.groupId,
-                totalWattHours = it.totalWattHours,
-                startTime = readableFormat.format(Date(it.startTime)),
-                endTime = readableFormat.format(Date(it.endTime)),
-                startLevel = it.startLevel,
-                endLevel = it.endLevel
+                group = consumption.id.toString(),
+                totalWattHours = consumption.totalWattHours,
+                startTime = readableFormat.format(Date(consumption.startTime)),
+                endTime = readableFormat.format(Date(consumption.endTime)),
+                startLevel = consumption.startLevel,
+                endLevel = consumption.endLevel,
+                uploadStatus = consumption.uploadStatus,
+                items = items
             )
         }
 
